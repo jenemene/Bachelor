@@ -8,7 +8,7 @@ def rotfromquat(quat):
     
         I = np.eye(3)
         q0 = quat[3]
-        q = quat[:3].reshape(3,1)
+        q = quat[:3]
         q_tilde = skewfromvec(q)
         R = I + 2*(q0*I + q_tilde)@q_tilde
         return R
@@ -40,6 +40,19 @@ def rigidbodytransform(vec):
 
     phi = np.block([[I,l_tilde],[Z,I]])
     return phi
+
+def spatialskewbar(X):
+    #Convert a 6D spatial-vector into a 6x6 skew-symmetric matrix as defined in 1.25 in ABI book
+
+    #Args: vec: A 6D vector as a np array of shape (6,1)
+
+    #Returns: np array: A 6x6 skew-symmetric matrix as a np array of shape (6,6)
+
+    X_bar = np.block([[skewfromvec(X[:3]),skewfromvec(X[3:])],
+             [np.zeros((3,3)),skewfromvec(X[:3])]])
+    return X_bar
+
+    
 
     
 
