@@ -26,3 +26,20 @@ def skewfromvec(vec):
                       [vec[2], 0, -vec[0]],
                       [-vec[1], vec[0], 0]])
     return S
+
+def rigidbodytransform(vec):
+    #Rigid body transformation matrix - no rotations
+
+    # Args: 3D vector as a np array of shape (3,1)
+
+    # Returns: 6x6 rigid body transformation matrix as a np array of shape (6,6)  
+    
+    I = np.eye(3)
+    Z = np.zeros((3,3))
+    l_tilde = skewfromvec(vec)
+
+    phi = np.block([[I,l_tilde],[Z,I]])
+    return phi
+
+    
+
