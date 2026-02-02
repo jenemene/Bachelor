@@ -15,13 +15,14 @@ def rotfromquat(quat):
 
 def skewfromvec(vec):
     #Convert a 3D vector to a skew-symmetric matrix.
-    
 
     #Args: vec: A 3D vector as a np array of shape (3,1)
 
     #Returns: np array: A 3x3 skew-symmetric matrix as a np array of shape (3,3)
     
-        S = np.array([[0, -vec[2], vec[1]],
+    vec = vec.flatten()
+
+    S = np.array([[0, -vec[2], vec[1]],
                       [vec[2], 0, -vec[0]],
                       [-vec[1], vec[0], 0]])
-        return S
+    return S
