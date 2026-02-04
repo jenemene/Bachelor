@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def spatial_plot(t, spatialquantity, type="force"):
+def spatial_plot(t, spatialquantity, type="spatialquantity"):
     # t: time vector as a np array of shape (N,)
     # spatialquantity: spatial quantity as a np array of shape (6,N)
+    # type: string indicating the type of spatial quantity ("force", "velocity", "acceleration")
     
     # Safety checks
     assert spatialquantity.shape[0] == 6, "Input spatial quantity must have shape (6,N)"
