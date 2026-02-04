@@ -1,5 +1,5 @@
 
-from matplotlib.pylab import beta
+import matplotlib.pyplot as plt 
 import numpy as np
 import soa as SOA
 from scipy.integrate import solve_ivp
@@ -165,7 +165,7 @@ def N_body_pendulum(n):
     odefun, 
     t_span=(0, tspan[-1]), 
     y0=state0, 
-    method='Radau',  # Better for stiff pendulum chains 
+    method='RK45',  # Better for stiff pendulum chains 
     args=(n,)
     )
     # Extract time and state vectors
@@ -174,7 +174,7 @@ def N_body_pendulum(n):
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    q0 = SOA.quatfromrev(np.pi/4, "y") 
+    q0 = SOA.quatfromrev(np.pi/6, "y") 
     
     # Repeat the quaternion n times (n, 4)
     qs = np.tile(q0, n)
@@ -187,5 +187,5 @@ def initial_config(n):
 
     return state0
 
-result = N_body_pendulum(2)
+result = N_body_pendulum(1)
 print(result)
