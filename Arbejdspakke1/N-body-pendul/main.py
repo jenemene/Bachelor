@@ -165,7 +165,7 @@ def N_body_pendulum(n):
     odefun, 
     t_span=(0, tspan[-1]), 
     y0=state0, 
-    method='RK45',  # Better for stiff pendulum chains 
+    method='RK45', 
     args=(n,)
     )
     # Extract time and state vectors
