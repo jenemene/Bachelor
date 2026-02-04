@@ -59,6 +59,36 @@ def spatialskewbar(X):
     return X_bar
 
     
+def spatialskewtilde(spatialvec):
+    #Convert a 6D spatial vector to a 6x6 skew-symmetric matrix.
 
+    #Args: spatialvec: A 6D spatial vector as a np array of shape (6,)
+
+    #Returns: np array: A 6x6 skew-symmetric matrix as a np array of shape (6,6)
+
+    assert spatialvec.shape == (6,), "Input spatial vector must be of shape (6,)"
+
+    w = spatialvec[:3]
+    v = spatialvec[3:]
+
+    w_tilde = skewfromvec(w.reshape(3,1))
+    v_tilde = skewfromvec(v.reshape(3,1))
+
+    S = np.block([[w_tilde, np.zeros((3,3))],
+                  [v_tilde, w_tilde]])
+    return S
     
+def spatialrotfromquat(quat):
+    #Convert a quaternion to a 6x6 spatial rotation matrix.
 
+    #Args: quat: Unit quaternion as a np array of shape (4,)
+
+    #Returns: np array: A 6x6 spatial rotation matrix as a np array of shape (6,6)
+
+    assert quat.shape == (4,), "Input quaternion must be of shape (4,)"
+    
+    R = rotfromquat(quat)
+
+    spatialR = np.block([[R, np.zeros((3,3))],
+                         [np.zeros((3,3)), R]])
+    return spatialR
