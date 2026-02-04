@@ -92,3 +92,49 @@ def spatialrotfromquat(quat):
     spatialR = np.block([[R, np.zeros((3,3))],
                          [np.zeros((3,3)), R]])
     return spatialR
+
+def derrivmap(theta,omega,type="type of joint"):
+    #arguments:
+    #theta: scalar or np array of shape (N,). Generalized coordinate(s)
+    #omega: angular velocity of k wrt to k+1 (this is usually just the generalized velocity depending on definition chosen)
+    #type: string indicating the type of hinge, either "revolute" or "spherical)
+
+    #returns:
+    #derrivative of generalized coordiantes (theta_dot) - flattened, i.e of shape (N,)
+
+    omega = omega.reshape(3,1)
+    
+    if type == "revolute":
+        derriv = omega
+    elif type == "spherical":
+        derriv = 0.5*np.block([[-skewfromvec(omega), omega],
+                               [-omega.T, 0]]) @ theta.reshape(4,1)
+    else:
+        raise ValueError("Type must be either 'revolute' or 'spherical'")
+    
+    return derriv.flatten()
+
+def quatfromrev(theta,axis="axis of orientation"):
+    #computes the quartenion represenation of the relative rotation of two bodies for a revolute joint
+    #arguments:
+    #theta: scalar: Generalized coordinate for that revolute joint
+    #axis: Rotation axis as a string, either "x", "y" or "z"
+
+    #returns:
+    #quat: Unit quaternion as a np array of shape (4,)
+
+    if axis == "x":
+        n = np.array([1,0,0])
+    elif axis == "y":
+        n = np.array([0,1,0])
+    elif axis == "z":
+        n = np.array([0,0,1])
+    else:
+        raise ValueError("Axis must be either 'x', 'y' or 'z'")
+    
+    q_vec = np.sin(theta/2)*n
+    q_scalar = np.cos(theta/2)
+
+    q = np.concatenate((q_vec, np.array([q_scalar])))
+
+    return q
