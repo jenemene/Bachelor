@@ -71,8 +71,8 @@ def spatialskewtilde(spatialvec):
     w = spatialvec[:3]
     v = spatialvec[3:]
 
-    w_tilde = skewfromvec(w.reshape(3,1))
-    v_tilde = skewfromvec(v.reshape(3,1))
+    w_tilde = skewfromvec(w)
+    v_tilde = skewfromvec(v)
 
     S = np.block([[w_tilde, np.zeros((3,3))],
                   [v_tilde, w_tilde]])
@@ -107,7 +107,7 @@ def derrivmap(theta,omega,type="type of joint"):
     if type == "revolute":
         derriv = omega
     elif type == "spherical":
-        derriv = 0.5*np.block([[-skewfromvec(omega), omega],
+        derriv = 0.5*np.block([[-skewfromvec(omega.flatten()), omega],
                                [-omega.T, 0]]) @ theta.reshape(4,1)
     else:
         raise ValueError("Type must be either 'revolute' or 'spherical'")
