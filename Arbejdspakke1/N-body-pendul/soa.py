@@ -109,6 +109,7 @@ def derrivmap(theta,omega,type="type of joint"):
     elif type == "spherical":
         derriv = 0.5*np.block([[-skewfromvec(omega.flatten()), omega],
                                [-omega.T, 0]]) @ theta.reshape(4,1)
+
     else:
         raise ValueError("Type must be either 'revolute' or 'spherical'")
     

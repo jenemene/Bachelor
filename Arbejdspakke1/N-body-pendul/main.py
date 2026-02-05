@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import soa as SOA
 from scipy.integrate import solve_ivp
+import plotting as SOAplt
 
 def N_body_pendulum(n):
 
@@ -48,7 +49,7 @@ def N_body_pendulum(n):
         h = l/10 #m - height of link
 
         #mass and inertia matrix
-        m = 20 #kg - very heavy link
+        m = 200 #kg - very heavy link
         J_c = np.diag([1/12*m*(h**2 + w**2), 1/12*m*(l**2 + h**2), 1/12*m*(l**2 + w**2)]) #inertia matrix at com in link frame
 
         #spatial inertia matrix at COM
@@ -65,8 +66,9 @@ def N_body_pendulum(n):
         #Hingemap
         H = np.block([[np.eye(3), np.zeros((3,3))]])
 
+
         #Gravity in inertial
-        g_inertial = np.array([0,0,0,0,0,9.81])
+        g_inertial = np.array([0,0,0,0,0,-9.81])
         
         #Kinematics scatter!
         # Preparing cells for values to store:
@@ -160,12 +162,13 @@ def N_body_pendulum(n):
         return alpha, gamma #gamma = beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 10, 0.2)
+    tspan = np.arange(0, 1000,0.1)
     result = solve_ivp(
     odefun, 
     t_span=(0, tspan[-1]), 
     y0=state0, 
-    method='RK45', 
+    method='Radau', 
+    t_eval = tspan,
     args=(n,)
     )
     # Extract time and state vectors
@@ -174,18 +177,25 @@ def N_body_pendulum(n):
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    q0 = SOA.quatfromrev(np.pi/6, "y") 
+    q1 = SOA.quatfromrev(np.pi/2, "y") 
+    q_rest = np.array([0,0,0,1])
+    q_rest_tiled = np.tile(q_rest, n-1)
     
-    # Repeat the quaternion n times (n, 4)
-    qs = np.tile(q0, n)
-    
-    # Create the zero vectors for the other states (n, 3)
+    # Create the zero vectors for the other initial velocities states (n, 3)
     zeros = np.zeros(3 * n)
     
     # Concatenate into one long state vector
-    state0 = np.concatenate([qs, zeros])
+    state0 = np.concatenate([q1,q_rest_tiled, zeros])
 
     return state0
+n_bodies = 5
 
-result = N_body_pendulum(1)
+result = N_body_pendulum(n_bodies)
 print(result)
+
+SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
+
+
+
+
+

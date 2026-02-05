@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def spatial_plot(t, spatialquantity, type="spatialquantity"):
+def spatial_plot(t, spatialquantity, type="spatialquantity",bodyno="body number"):
     # t: time vector as a np array of shape (N,)
     # spatialquantity: spatial quantity as a np array of shape (6,N)
     # type: string indicating the type of spatial quantity ("force", "velocity", "acceleration")
@@ -50,5 +50,34 @@ def spatial_plot(t, spatialquantity, type="spatialquantity"):
 
     #limits
     ax_left.set_xlim(t[0], t[-1])
-    plt.title(f"Spatial Plot: {type.capitalize()}")
+    plt.title(f"Spatial Plot: {type.capitalize()} (Body {bodyno})")
+    plt.show()
+
+def N_body_pendulum_gen_plot(t_vals,y_vals,n_bodies):
+    # Create a figure with a subplot for each body
+    fig, axes = plt.subplots(n_bodies, 1, figsize=(10, 2 * n_bodies), sharex=True)
+
+    # If n_bodies is 1, axes is not an array, so we wrap it
+    if n_bodies == 1:
+        axes = [axes]
+
+    for k in range(n_bodies):
+        # Calculate the starting index for beta of body k
+        idx_start = 4 * n_bodies + 3 * k
+        
+        # Extract components: x, y, z (shape: 3, len(t_vals))
+        beta_k = y_vals[idx_start : idx_start + 3, :]
+        
+        # Plotting to the specific subplot
+        axes[k].plot(t_vals, beta_k[0, :], label=r'$\omega_x$')
+        axes[k].plot(t_vals, beta_k[1, :], label=r'$\omega_y$')
+        axes[k].plot(t_vals, beta_k[2, :], label=r'$\omega_z$')
+        
+        axes[k].set_ylabel(f'Body {k+1}\n[rad/s]')
+        axes[k].legend(loc='upper right', fontsize='small')
+        axes[k].grid(True, alpha=0.3)
+
+    axes[-1].set_xlabel('Time [s]')
+    fig.suptitle('Angular Velocity Components per Link', fontsize=14)
+    plt.tight_layout()
     plt.show()
