@@ -83,16 +83,20 @@ def N_body_pendulum_gen_plot(t_vals,y_vals,n_bodies):
     plt.tight_layout()
     plt.show()
 
-def animate_n_bodies(result, l_vec, interval=30):
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
-    n_states, N = result.shape
 
-    # spherical joints: 4 q + 3 omega per joint
+def animate_n_bodies(time, states, l_vec):
+
+    n_states, N = states.shape
+
+    # spherical joints assumption
     n = int(n_states / 7) + 1
     n_joints = n - 1
     quat_block_size = 4 * n_joints
 
-    # ---- Setup figure ----
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
@@ -104,11 +108,11 @@ def animate_n_bodies(result, l_vec, interval=30):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
 
-    points, = ax.plot([], [], [], 'o-', lw=2)
+    line, = ax.plot([], [], [], 'o-', lw=2)
 
-    # ==================================
-    # --- Forward Kinematics ---
-    # ==================================
+    # =============================
+    # Forward Kinematics
+    # =============================
 
     def compute_positions(state_k):
 
@@ -129,30 +133,33 @@ def animate_n_bodies(result, l_vec, interval=30):
         positions = [np.zeros(3)]
 
         for i in range(n_joints):
-            next_pos = positions[-1] + R_cumulative[i] @ l_vec
-            positions.append(next_pos)
+            positions.append(
+                positions[-1] + R_cumulative[i] @ l_vec
+            )
 
         return np.array(positions)
 
-
-    # ==================================
-    # --- Animation Update ---
-    # ==================================
+    # =============================
+    # Animation Update
+    # =============================
 
     def update(frame):
 
-        state_k = result[:, frame]
+        state_k = states[:, frame]
         positions = compute_positions(state_k)
 
-        points.set_data(positions[:, 0], positions[:, 1])
-        points.set_3d_properties(positions[:, 2])
+        line.set_data(positions[:, 0], positions[:, 1])
+        line.set_3d_properties(positions[:, 2])
 
-        ax.set_title(f"Frame {frame}/{N}")
+        ax.set_title(f"t = {time[frame]:.3f} s")
 
-        return points,
+        return line,
 
+    # Frame timing based on actual simulation time
+    dt = np.mean(np.diff(time))
+    interval = dt * 1000  # milliseconds
 
-    ani = animation(
+    ani = animation.FuncAnimation(
         fig,
         update,
         frames=N,
@@ -163,4 +170,5 @@ def animate_n_bodies(result, l_vec, interval=30):
     plt.show()
 
     return ani
+
 
