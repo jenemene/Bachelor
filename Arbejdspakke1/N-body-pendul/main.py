@@ -78,21 +78,24 @@ def N_body_pendulum(n):
         agothic = [None] * n
         bgothic = [None] * n
         g = [None] * n #accelerations in local body frame
-        
+        nRI = [None] * n
+
         for k in reversed(range(n)):
             #rotation matrices
             pRc = SOA.spatialrotfromquat(theta[k]) #rotation from child to parent
             cRp = pRc.T #rotation from parent to child
+
+            nRI[k] = nRI[k+1] @ cRp if k < n-1 else cRp #rotation from inertial to parent, if k = n-1 then it is identity since the parent is inertial frame
 
             #Spatial velocities
             delta_V = H.T @ beta[k] #hinge contribution
            
             if k == n-1: #special case, last hinge. No spatial velocity of inertial frame (it is inertial :))
                 V[k] = delta_V
-                g[k] = cRp@g_inertial
+                #g[k] = cRp@g_inertial
             else:
                  V[k] = cRp @ V[k+1] + delta_V
-                 g[k] = cRp@g[k+1] #rotating from parent to child 
+                 #g[k] = cRp@g[k+1] #rotating from parent to child 
                 
             # Coriolis term (const. joint map and pure rotation):
             if k == n - 1:
@@ -122,7 +125,7 @@ def N_body_pendulum(n):
                 G[k] = P @ H.T @ np.linalg.inv(D)
                 taubar = np.eye(6) - G[k] @ H
                 Pplus[k] = taubar @ P
-                vareps = P @ agothic[k] + bgothic[k] - RBT_com @ f_gravity
+                vareps = P @ agothic[k] + bgothic[k] - RBT_com @ nRI[k] @ f_gravity 
                 eps = tau[k] - H @ vareps 
                 nu[k] = np.linalg.inv(D) @ eps
                 varepsplus[k] = vareps + G[k] @ eps
@@ -137,7 +140,7 @@ def N_body_pendulum(n):
                 G[k] = P @ H.T @ np.linalg.inv(D)
                 taubar = np.eye(6) - G[k] @ H
                 Pplus[k] = taubar @ P
-                vareps = RBT @ pRc @ varepsplus[k-1] + P @ agothic[k] + bgothic[k] - RBT_com @ f_gravity
+                vareps = RBT @ pRc @ varepsplus[k-1] + P @ agothic[k] + bgothic[k] - RBT_com @ nRI[k] @f_gravity
                 eps = tau[k] - H @ vareps 
                 nu[k] = np.linalg.inv(D) @ eps
                 varepsplus[k] = vareps + G[k] @ eps
