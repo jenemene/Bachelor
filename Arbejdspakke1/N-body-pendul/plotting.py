@@ -88,7 +88,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 
-def animate_n_bodies(time, states, l_vec):
+def animate_n_bodies(time, states, l_vec): #skal kigges på igen, noget værre pislort.
 
     n_states, N = states.shape
 

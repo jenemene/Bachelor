@@ -139,3 +139,40 @@ def quatfromrev(theta,axis="axis of orientation"):
     q = np.concatenate((q_vec, np.array([q_scalar])))
 
     return q
+
+class SimpleLink:
+    def __init__(self,m,l_com,l_hinge):
+
+        #adding attribtues to object
+        self.m = m
+        self.l_com = l_com
+        self.l_hinge = l_hinge
+
+        #calculating geometry (right now width and heigh of link is just 1/10 of length)
+        l = np.linalg.norm(l_hinge)
+        w = l/10
+        h = w
+        self.J_c = np.diag([1/12*m*(h**2 + w**2), 1/12*m*(l**2 + h**2), 1/12*m*(l**2 + w**2)])
+
+        #spatial inertia at COM
+        self.M_c =  np.block([[self.J_c, np.zeros((3,3))],
+                          [np.zeros((3,3)), m*np.eye(3)]])
+    
+        self.M = RBT(l_com)@self.M_c@RBT(l_com).T #spatial inertia at body frame (located at hinge)
+
+    def set_hingemap(self,type="hingetype"):
+        if type == "spherical":
+            self.H =np.block([[np.eye(3), np.zeros((3,3))]])
+        else:
+            print("right now i have only specified for spherical joints")
+
+def normalize_quaternions(q):
+    #takes a vector of stacked quartenions and normalized them. fully vectorized.
+    q = np.asarray(q)
+    q_reshaped = q.reshape(-1, 4)
+    norms = np.linalg.norm(q_reshaped, axis=1, keepdims=True)
+    q_reshaped /= norms
+    return q_reshaped.reshape(-1)
+        
+
+    
