@@ -66,6 +66,8 @@ def N_body_pendulum(n):
         #Hingemap
         H = np.block([[np.eye(3), np.zeros((3,3))]])
 
+        # Spatial force from grativy
+        f_gravity = np.array([0,0,0,0,0,-m*9.81])
 
         #Gravity in inertial
         g_inertial = np.array([0,0,0,0,0,-9.81])
@@ -113,13 +115,14 @@ def N_body_pendulum(n):
 
 
         for k in range(n):
+
             if k == 0:
                 P = M
                 D = H @ P @ H.T
                 G[k] = P @ H.T @ np.linalg.inv(D)
                 taubar = np.eye(6) - G[k] @ H
                 Pplus[k] = taubar @ P
-                vareps = P @ agothic[k] + bgothic[k] 
+                vareps = P @ agothic[k] + bgothic[k] - RBT_com @ f_gravity
                 eps = tau[k] - H @ vareps 
                 nu[k] = np.linalg.inv(D) @ eps
                 varepsplus[k] = vareps + G[k] @ eps
@@ -134,7 +137,7 @@ def N_body_pendulum(n):
                 G[k] = P @ H.T @ np.linalg.inv(D)
                 taubar = np.eye(6) - G[k] @ H
                 Pplus[k] = taubar @ P
-                vareps = RBT @ pRc @ varepsplus[k-1] + P @ agothic[k] + bgothic[k] 
+                vareps = RBT @ pRc @ varepsplus[k-1] + P @ agothic[k] + bgothic[k] - RBT_com @ f_gravity
                 eps = tau[k] - H @ vareps 
                 nu[k] = np.linalg.inv(D) @ eps
                 varepsplus[k] = vareps + G[k] @ eps
@@ -144,7 +147,7 @@ def N_body_pendulum(n):
         for k in reversed(range(n)):
             if k == n - 1:
                 alphaplus = np.zeros(6)
-                nu_bar[k] = nu[k] - G[k].T @ g[k]
+                nu_bar[k] = nu[k] #- G[k].T @ g[k]
                 gamma[k] = nu_bar[k] - G[k].T @ alphaplus
                 alpha[k] = alphaplus + H.T @ gamma[k] + agothic[k]
             else:
@@ -156,7 +159,7 @@ def N_body_pendulum(n):
                 #loop itself
 
                 alphaplus = cRp @ RBT.T @ alpha[k+1]
-                nu_bar[k] = nu[k] - G[k].T @ g[k]
+                nu_bar[k] = nu[k] #- G[k].T @ g[k]
                 gamma[k] = nu_bar[k] - G[k].T @ alphaplus
                 alpha[k] = alphaplus + H.T @ gamma[k] + agothic[k]
         return alpha, gamma #gamma = beta_dot
@@ -177,7 +180,7 @@ def N_body_pendulum(n):
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    q1 = SOA.quatfromrev(np.pi/2, "y") 
+    qn = SOA.quatfromrev(np.pi/2, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -185,15 +188,17 @@ def initial_config(n):
     zeros = np.zeros(3 * n)
     
     # Concatenate into one long state vector
-    state0 = np.concatenate([q1,q_rest_tiled, zeros])
+    state0 = np.concatenate([q_rest_tiled, qn, zeros])
 
     return state0
-n_bodies = 5
+
+n_bodies = 1
 
 result = N_body_pendulum(n_bodies)
 print(result)
 
 SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
+
 
 
 
