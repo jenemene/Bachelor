@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
-
+import matplotlib.animation as animation
+import soa as SOA
 def spatial_plot(t, spatialquantity, type="spatialquantity",bodyno="body number"):
     # t: time vector as a np array of shape (N,)
     # spatialquantity: spatial quantity as a np array of shape (6,N)
@@ -81,3 +82,85 @@ def N_body_pendulum_gen_plot(t_vals,y_vals,n_bodies):
     fig.suptitle('Angular Velocity Components per Link', fontsize=14)
     plt.tight_layout()
     plt.show()
+
+def animate_n_bodies(result, l_vec, interval=30):
+
+    n_states, N = result.shape
+
+    # spherical joints: 4 q + 3 omega per joint
+    n = int(n_states / 7) + 1
+    n_joints = n - 1
+    quat_block_size = 4 * n_joints
+
+    # ---- Setup figure ----
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.set_xlim([-10, 30])
+    ax.set_ylim([-20, 20])
+    ax.set_zlim([-10, 20])
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+
+    points, = ax.plot([], [], [], 'o-', lw=2)
+
+    # ==================================
+    # --- Forward Kinematics ---
+    # ==================================
+
+    def compute_positions(state_k):
+
+        quat_block = state_k[:quat_block_size]
+
+        quats = [
+            quat_block[4*i:4*(i+1)]
+            for i in range(n_joints)
+        ]
+
+        R_cumulative = []
+        R = np.eye(3)
+
+        for q in reversed(quats):
+            R = R @ SOA.rotfromquat(q)
+            R_cumulative.insert(0, R.copy())
+
+        positions = [np.zeros(3)]
+
+        for i in range(n_joints):
+            next_pos = positions[-1] + R_cumulative[i] @ l_vec
+            positions.append(next_pos)
+
+        return np.array(positions)
+
+
+    # ==================================
+    # --- Animation Update ---
+    # ==================================
+
+    def update(frame):
+
+        state_k = result[:, frame]
+        positions = compute_positions(state_k)
+
+        points.set_data(positions[:, 0], positions[:, 1])
+        points.set_3d_properties(positions[:, 2])
+
+        ax.set_title(f"Frame {frame}/{N}")
+
+        return points,
+
+
+    ani = animation(
+        fig,
+        update,
+        frames=N,
+        interval=interval,
+        blit=False
+    )
+
+    plt.show()
+
+    return ani
+
