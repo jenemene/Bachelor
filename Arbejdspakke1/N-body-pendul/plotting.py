@@ -100,9 +100,10 @@ def animate_n_bodies(time, states, l_vec): #skal kigges på igen, noget værre p
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    ax.set_xlim([-10, 30])
-    ax.set_ylim([-20, 20])
-    ax.set_zlim([-10, 20])
+    
+    ax.set_xlim([-10, 10])
+    ax.set_ylim([-10, 10])
+    ax.set_zlim([-10, 10])
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")

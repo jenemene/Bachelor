@@ -42,7 +42,7 @@ def N_body_pendulum_2(n):
         #setting up link
         m = 20
         l_com = np.array([0,0,2.5])
-        l_hinge = np.array([0,0,5])
+        l_hinge = np.array([0,0,0.5])
         link = SOA.SimpleLink(m,l_com,l_hinge)
         link.set_hingemap("spherical")
 
@@ -149,14 +149,14 @@ def N_body_pendulum_2(n):
             cRp = pRc.T 
 
             A_plus = cRp@ RBT.T @A[k+1]
-            nu_bar = nu[k] - G[k].T @ g[k] #den her linje er skør, hvis fejl kig her omkring. Også kig på rotationerne, de er lidt skøre, der kan måske  godt være fejl
-            beta_dot[k] = nu_bar - G[k].T @ A_plus
+            nu_bar = nu[k] - G[k].T @ g[k]  
+            beta_dot[k] = nu_bar - G[k].T @ A_plus - 0.2*beta[k] #dæmpning hvis man vil :)
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
         return A,V,beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 50,0.03)
+    tspan = np.arange(0, 200,0.03)
     result = solve_ivp(
         odefun, 
         t_span=(0, tspan[-1]), 
@@ -185,12 +185,12 @@ def initial_config(n):
 
     return state0
 
-n_bodies = 5
+n_bodies = 20
 
 result = N_body_pendulum_2(n_bodies)
-print(result)
+#print(result)
 
-#SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
+SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
 
 
-#SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,5]))
+SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.5]))
