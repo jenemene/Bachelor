@@ -92,10 +92,8 @@ def N_body_pendulum(n):
            
             if k == n-1: #special case, last hinge. No spatial velocity of inertial frame (it is inertial :))
                 V[k] = delta_V
-                #g[k] = cRp@g_inertial
             else:
-                 V[k] = cRp @ V[k+1] + delta_V
-                 #g[k] = cRp@g[k+1] #rotating from parent to child 
+                 V[k] = cRp @ RBT.T @ V[k+1] + delta_V ### Added RBT.T
                 
             # Coriolis term (const. joint map and pure rotation):
             if k == n - 1:
@@ -168,7 +166,7 @@ def N_body_pendulum(n):
         return alpha, gamma #gamma = beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 1000,0.1)
+    tspan = np.arange(0, 60,0.1)
     result = solve_ivp(
     odefun, 
     t_span=(0, tspan[-1]), 
