@@ -61,7 +61,7 @@ def N_body_pendulum(n):
 
         #rigid body transform across links (from parent inboard to outboard)
         RBT = SOA.RBT(l_hinge)
-        RBT_com = SOA.RBT(l_com)
+        RBT_com = SOA.RBT(-l_com)
 
         #Hingemap
         H = np.block([[np.eye(3), np.zeros((3,3))]])
@@ -138,7 +138,7 @@ def N_body_pendulum(n):
                 G[k] = P @ H.T @ np.linalg.inv(D)
                 taubar = np.eye(6) - G[k] @ H
                 Pplus[k] = taubar @ P
-                vareps = RBT @ pRc @ varepsplus[k-1] + P @ agothic[k] + bgothic[k] - RBT_com @ nRI[k] @f_gravity
+                vareps = RBT @ pRc @ varepsplus[k-1] + P @ agothic[k] + bgothic[k] - RBT_com @ nRI[k] @ f_gravity
                 eps = tau[k] - H @ vareps 
                 nu[k] = np.linalg.inv(D) @ eps
                 varepsplus[k] = vareps + G[k] @ eps
@@ -148,7 +148,7 @@ def N_body_pendulum(n):
         for k in reversed(range(n)):
             if k == n - 1:
                 alphaplus = np.zeros(6)
-                nu_bar[k] = nu[k] #- G[k].T @ g[k]
+                nu_bar[k] = nu[k]
                 gamma[k] = nu_bar[k] - G[k].T @ alphaplus
                 alpha[k] = alphaplus + H.T @ gamma[k] + agothic[k]
             else:
@@ -158,9 +158,8 @@ def N_body_pendulum(n):
                 cRp = pRc.T
                 
                 #loop itself
-
                 alphaplus = cRp @ RBT.T @ alpha[k+1]
-                nu_bar[k] = nu[k] #- G[k].T @ g[k]
+                nu_bar[k] = nu[k]
                 gamma[k] = nu_bar[k] - G[k].T @ alphaplus
                 alpha[k] = alphaplus + H.T @ gamma[k] + agothic[k]
         return alpha, gamma #gamma = beta_dot
@@ -181,7 +180,7 @@ def N_body_pendulum(n):
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(np.pi/2, "y")
+    qn = SOA.quatfromrev(-np.pi/2, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -199,9 +198,4 @@ result = N_body_pendulum(n_bodies)
 print(result)
 
 SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
-
-
-
-
-
 
