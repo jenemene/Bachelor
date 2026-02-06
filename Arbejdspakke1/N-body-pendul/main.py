@@ -40,7 +40,7 @@ def N_body_pendulum(n):
 
     def ATBI(theta, beta, tau):
         #vectors
-        l_hinge = np.array([0,0,5]) #vector from hinge to hinge in link frame. This is vector l(O_k,O+_k-1) in k frame.
+        l_hinge = np.array([0,0,-5]) #vector from hinge to hinge in link frame. This is vector l(O_k,O+_k-1) in k frame.
         l_com = np.array([0,0,2.5]) #vector from hinge to com in link frame. This is vector l(O_k,C_k) in k frame.
 
         #geometry of link
@@ -49,28 +49,25 @@ def N_body_pendulum(n):
         h = l/10 #m - height of link
 
         #mass and inertia matrix
-        m = 200 #kg - very heavy link
+        m = 20 #kg - very heavy link
         J_c = np.diag([1/12*m*(h**2 + w**2), 1/12*m*(l**2 + h**2), 1/12*m*(l**2 + w**2)]) #inertia matrix at com in link frame
 
         #spatial inertia matrix at COM
         M_c = np.block([[J_c, np.zeros((3,3))],
                           [np.zeros((3,3)), m*np.eye(3)]])
         
-        #spatial inertia at hinge
-        M = SOA.RBT(l_com)@M_c@SOA.RBT(l_com).T #hvis der er en fejl så kig her først
-
         #rigid body transform across links (from parent inboard to outboard)
         RBT = SOA.RBT(l_hinge)
-        RBT_com = SOA.RBT(-l_com)
+        RBT_com = SOA.RBT(l_com)
+
+        #spatial inertia at hinge
+        M = RBT_com @ M_c @ RBT_com.T #hvis der er en fejl så kig her først
 
         #Hingemap
         H = np.block([[np.eye(3), np.zeros((3,3))]])
 
         # Spatial force from grativy
         f_gravity = np.array([0,0,0,0,0,-m*9.81])
-
-        #Gravity in inertial
-        g_inertial = np.array([0,0,0,0,0,-9.81])
         
         #Kinematics scatter!
         # Preparing cells for values to store:
@@ -85,7 +82,7 @@ def N_body_pendulum(n):
             pRc = SOA.spatialrotfromquat(theta[k]) #rotation from child to parent
             cRp = pRc.T #rotation from parent to child
 
-            nRI[k] = nRI[k+1] @ cRp if k < n-1 else cRp #rotation from inertial to parent, if k = n-1 then it is identity since the parent is inertial frame
+            nRI[k] = nRI[k+1] @ cRp if k < n-1 else cRp #rotation from inertial to parent, if k = n-1, it's just cRp, since parent is inertial frame.
 
             #Spatial velocities
             delta_V = H.T @ beta[k] #hinge contribution
@@ -165,13 +162,15 @@ def N_body_pendulum(n):
         return alpha, gamma #gamma = beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 60,0.1)
+    tspan = np.arange(0, 100,0.1)
     result = solve_ivp(
     odefun, 
     t_span=(0, tspan[-1]), 
     y0=state0, 
-    method='Radau', 
+    method='RK45',
     t_eval = tspan,
+    r_tol=1e-6,
+    a_tol=1e-8,
     args=(n,)
     )
     # Extract time and state vectors
@@ -192,10 +191,11 @@ def initial_config(n):
 
     return state0
 
-n_bodies = 1
+n_bodies = 2
 
 result = N_body_pendulum(n_bodies)
 print(result)
 
-SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
+#SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
 
+SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,-5]))
