@@ -18,7 +18,7 @@ def N_body_pendulum_2(n):
         beta = state[4*n:]
 
         #normalizing quartenions
-        SOA.normalize_quaternions(theta)
+        #SOA.normalize_quaternions(theta)
         
         #calculating theta_dot based on the derrivmap function
         theta_dot = np.zeros(len(theta))
@@ -94,14 +94,16 @@ def N_body_pendulum_2(n):
         
         #gravity and storage of gravity
         g = [None]*(n+2)
-        g[n+1] = np.array([0,0,0,0,0, 0])
+        g[n+1] = np.array([0,0,0,0,0,9.81])
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
         tau_bar[0] = P_plus[0]
-        A[n+1] = np.array([0, 0, 0, 0, 0, -9.82])
+        A[n+1] = np.array([0, 0, 0, 0, 0, 0])
         V[n+1] = np.zeros((6,))
+
+        #kinematics scatter
 
         for k in range(n,0,-1):
             #rotation matrices
@@ -146,23 +148,21 @@ def N_body_pendulum_2(n):
             pRc = SOA.spatialrotfromquat(theta[k])
             cRp = pRc.T 
 
-            A_plus = cRp@RBT.T@A[k+1]
-            nu_bar = nu[k] -G[k].T @ g[k] #den her linje er skør, hvis fejl kig her omkring. Også kig på rotationerne, de er lidt skøre, der kan måske  godt være fejl
-            beta_dot[k] = nu_bar - G[k].T@A_plus
-            A[k] = A_plus + link.H.T@beta_dot[k] + agothic[k]
+            A_plus = cRp@ RBT.T @A[k+1]
+            nu_bar = nu[k] - G[k].T @ g[k] #den her linje er skør, hvis fejl kig her omkring. Også kig på rotationerne, de er lidt skøre, der kan måske  godt være fejl
+            beta_dot[k] = nu_bar - G[k].T @ A_plus
+            A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
         return A,V,beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 200,0.1)
+    tspan = np.arange(0, 50,0.03)
     result = solve_ivp(
         odefun, 
         t_span=(0, tspan[-1]), 
         y0=state0, 
         method='Radau',
         t_eval = tspan,
-        r_tol=1e-6,
-        a_tol=1e-8,
         args=(n,)
         )
             # Extract time and state vectors
@@ -173,7 +173,7 @@ def N_body_pendulum_2(n):
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(-np.pi/2, "y")
+    qn = SOA.quatfromrev(3*np.pi/4, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -185,12 +185,12 @@ def initial_config(n):
 
     return state0
 
-n_bodies = 2
+n_bodies = 5
 
 result = N_body_pendulum_2(n_bodies)
 print(result)
 
-SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
-plt.show()
+#SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
+
 
 #SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,5]))
