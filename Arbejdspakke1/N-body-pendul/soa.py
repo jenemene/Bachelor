@@ -159,7 +159,7 @@ class SimpleLink:
                           [np.zeros((3,3)), m*np.eye(3)]])
     
         self.M = RBT(l_com)@self.M_c@RBT(l_com).T #spatial inertia at body frame (located at hinge)
-
+    
     def set_hingemap(self,type="hingetype"):
         if type == "spherical":
             self.H =np.block([[np.eye(3), np.zeros((3,3))]])

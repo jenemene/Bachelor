@@ -115,8 +115,7 @@ def ATBIalg(state,tau_vec,n):
         #coriolois acc
         agothic[k] = SOA.spatialskewtilde(V[k]) @ link.H.T @ beta[k]
 
-    #ATBI gather
-    for k 
+    #ATBI gather KOM I GANG
 
 
 
