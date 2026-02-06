@@ -1,124 +1,172 @@
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt 
 import numpy as np
 import soa as SOA
 from scipy.integrate import solve_ivp
 import plotting as SOAplt
 
-def N_body_pendulum_2(t,state,n):
+def N_body_pendulum_2(n):
     
     state0 = initial_config(n)
 
-    #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
+    def odefun(t,state,n):
+        #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
 
-    #unpacking state
-    theta = state[:4*n]
-    beta = state[4*n:]
+        #unpacking state
+        theta = state[:4*n]
+        beta = state[4*n:]
 
-    #normalizing quartenions
-    SOA.normalize_quaternions(theta)
-    
-    #calculating theta_dot based on the derrivmap function
-    theta_dot = np.zeros(len(theta))
-    for i in range(n):
-        idxq = 4*i #these indexes assume that we ONLY have spherical joints
-        idxw = 4*n + 3*i
-        theta_dot[idxq:idxq+4] = SOA.derrivmap(theta[idxq:idxq+4],beta[idxw:idxw+3],"spherical")
+        #normalizing quartenions
+        SOA.normalize_quaternions(theta)
         
-    #Calculationg of generalized accelerations (beta_dot) - this requires ATBI. 
-    tau_vec = np.zeros_like(beta) #no external torques
+        #calculating theta_dot based on the derrivmap function
+        theta_dot = np.zeros(len(theta))
+        for i in range(n):
+            idxq = 4*i #these indexes assume that we ONLY have spherical joints
+            idxw = 3*i
+            theta_dot[idxq:idxq+4] = SOA.derrivmap(theta[idxq:idxq+4],beta[idxw:idxw+3],"spherical")
+            
+        #Calculationg of generalized accelerations (beta_dot) - this requires ATBI. 
+        tau_vec = np.zeros_like(beta) #no external torques
 
-    A,V,beta_dot = ATBIalg(state,tau_vec,n)
+        A,V,beta_dot_list = ATBIalg(state,tau_vec,n)
 
-    state_dot = np.concatenate(theta_dot + beta_dot)
+        beta_dot = np.concatenate([b.flatten() for b in beta_dot_list[1:n+1]])
 
-    return state_dot
+        state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
 
-def ATBIalg(state,tau_vec,n):
-    #setting up link
-    m = 20
-    l_com = np.array([0,0,2.5])
-    l_hinge = np.array([0,0,5])
-    link = SOA.SimpleLink(m,l_com,l_hinge)
-    link.set_hingemap("spherical")
+        return state_dot
 
-    #rigidbodytransform
-    RBT = SOA.RBT(l_hinge)
-    RBT_com = SOA.RBT(l_hinge)
-    #unpacking state
+    def ATBIalg(state,tau_vec,n):
+        #setting up link
+        m = 20
+        l_com = np.array([0,0,2.5])
+        l_hinge = np.array([0,0,5])
+        link = SOA.SimpleLink(m,l_com,l_hinge)
+        link.set_hingemap("spherical")
 
-    theta_vec = state[:4*n]
-    beta_vec  = state[4*n:]
+        #rigidbodytransform
+        RBT = SOA.RBT(l_hinge)
+        RBT_com = SOA.RBT(l_hinge)
+        #unpacking state
 
-    theta = [None]*(n+2)
-    beta  = [None]*(n+2)
-    tau   = [None]*(n+2)
+        theta_vec = state[:4*n]
+        beta_vec  = state[4*n:]
 
-    # boundary conditions - det kan diskuteres om man behøver i begge ender for dem alle, det gør man vidst nok ikke
-    theta[0]   = np.zeros(4)
-    theta[n+1] = np.zeros(4)
+        theta = [None]*(n+2)
+        beta  = [None]*(n+2)
+        tau   = [None]*(n+2)
 
-    beta[0]    = np.zeros(3)
-    beta[n+1]  = np.zeros(3)
+        # boundary conditions - det kan diskuteres om man behøver i begge ender for dem alle, det gør man vidst nok ikke
+        theta[0]   = np.zeros(4)
+        theta[n+1] = np.zeros(4)
 
-    tau[0]     = np.zeros(3)
-    tau[n+1]   = np.zeros(3)
+        beta[0]    = np.zeros(3)
+        beta[n+1]  = np.zeros(3)
 
-    #unpacking interior (IDK OM VI SKAL PASSE DOM EN FUCKING LISTE JEG FØLGER MIT RETARD MATLAB)
-    for i in range(1, n+1):
+        tau[0]     = np.zeros(3)
+        tau[n+1]   = np.zeros(3)
 
-        idxq = 4*(i-1)
-        idxw = 3*(i-1)
+        #unpacking interior (IDK OM VI SKAL PASSE DOM EN FUCKING LISTE JEG FØLGER MIT RETARD MATLAB)
+        for i in range(1, n+1):
 
-        theta[i] = theta_vec[idxq:idxq+4]
-        beta[i]  = beta_vec[idxw:idxw+3]
-        tau[i]   = tau_vec[3*(i-1):3*i]
+            idxq = 4*(i-1)
+            idxw = 3*(i-1)
 
+            theta[i] = theta_vec[idxq:idxq+4]
+            beta[i]  = beta_vec[idxw:idxw+3]
+            tau[i]   = tau_vec[3*(i-1):3*i]
+
+            
+
+        #storage
+        P_plus = [None]*(n+2)
+        xi_plus = [None]*(n+2)
+        nu = [None]*(n+2)
+        A = [None]*(n+2)
+        V = [None]*(n+2)
+        G = [None]*(n+2)
+        beta_dot = [None]*(n+2)
+        tau_bar = [None]*(n+2)
+        agothic = [None]*(n+2)
+        bgothic = [None]*(n+2)
         
+        #gravity and storage of gravity
+        g = [None]*(n+2)
+        g[n+1] = np.array([0,0,0,0,0, 0])
 
-    #storage
-    P_plus = [None]*(n+2)
-    xi_plus = P_plus
-    nu = P_plus
-    A = P_plus
-    V = P_plus
-    G = P_plus
-    beta_dot = P_plus
-    tau_bar = P_plus
-    agothic = [None] * (n+2)
-    bgothic = [None] * (n+2)
-    kRI = [None] * (n+2)
+        #boundary conditions on spatial operator quantities
+        P_plus[0] = np.zeros((6,6))
+        xi_plus[0] = np.zeros((6,))
+        tau_bar[0] = P_plus[0]
+        A[n+1] = np.array([0, 0, 0, 0, 0, -9.82])
+        V[n+1] = np.zeros((6,))
 
-    #boundary conditions on spatial operator quantities
-    P_plus[0] = np.zeros((6,6))
-    xi_plus[0] = np.zeros((6,1))
-    tau_bar[0] = P_plus[0]
-    A[n+1] = np.zeros((6,1))
-    V[n+1] = np.zeros((6,1))
-    kRI[n+1] = np.eye(3)
+        for k in range(n,0,-1):
+            #rotation matrices
+            pRc = SOA.spatialrotfromquat(theta[k]) #vurder det her
+            cRp = pRc.T #from parent to child -> this is the direction we are going right now
 
-    for k in range(n,0,-1):
-        #rotation matrices
-        pRc = SOA.spatialrotfromquat(theta[k])
-        cRp = pRc.T #from parent to child -> this is the direction we are going right now
+            #rotating gravity such that we have that in frame aswell
+            g[k] = cRp@g[k+1]
 
-        #commultative rotation
-        kRkp1 = SOA.rotfromquat(theta[k])
+            #hinge contribtuion
+            delta_V = link.H.T @ beta[k]
 
-        kRI[k] = kRkp1 @ nRI[k+1] #jeg bliver i tvivl nu om jeg overhovedet behandler body n som inertial eller om jeg nu rent faktsik behandler body n+1 som inertial
+            #spatial velocity
+            V[k] = cRp @ RBT.T @ V[k+1] + delta_V
 
-        #hinge contribtuion
-        delta_V = link.H.T @ beta[k]
+            #coriolois acc
+            agothic[k] = SOA.spatialskewtilde(V[k]) @ link.H.T @ beta[k]
 
-        #spatial velocity
-        V[k] = cRp @ RBT.T @ V[k+1] + delta_V
+            #gyroscopic term
+            bgothic[k] = SOA.spatialskewbar(V[k]) @ link.M @ V[k]
 
-        #coriolois acc
-        agothic[k] = SOA.spatialskewtilde(V[k]) @ link.H.T @ beta[k]
+        #ATBI gather KOM I GANG
+        for k in range(1,n+1): #n+1 fordi den ikke medtager n+1. Det så mærkeligt.
 
-    #ATBI gather KOM I GANG
+            #rotations
+            pRc = SOA.spatialrotfromquat(theta[k-1])
+            cRp = pRc.T 
 
+            P = RBT@pRc@P_plus[k-1]@cRp@RBT.T + link.M
+            D = link.H@P@link.H.T
+            G[k] = P@link.H.T@np.linalg.inv(D)
+            tau_bar[k] = np.eye(6) - G[k]@link.H
+            P_plus[k] = tau_bar[k]@P
+            xi = RBT@pRc@xi_plus[k-1] + P@agothic[k] + bgothic[k]
+            eps = tau[k]-link.H@xi
+            nu[k] = np.linalg.inv(D)@eps
+            xi_plus[k] = xi + G[k]@eps
 
+        #ATBI scatter
+        for k in range(n,0,-1):
+            #rotations
+            pRc = SOA.spatialrotfromquat(theta[k])
+            cRp = pRc.T 
 
+            A_plus = cRp@RBT.T@A[k+1]
+            nu_bar = nu[k] -G[k].T @ g[k] #den her linje er skør, hvis fejl kig her omkring. Også kig på rotationerne, de er lidt skøre, der kan måske  godt være fejl
+            beta_dot[k] = nu_bar - G[k].T@A_plus
+            A[k] = A_plus + link.H.T@beta_dot[k] + agothic[k]
+
+        return A,V,beta_dot
+
+    # Solve the ODE using scipy's solve_ivp
+    tspan = np.arange(0, 200,0.1)
+    result = solve_ivp(
+        odefun, 
+        t_span=(0, tspan[-1]), 
+        y0=state0, 
+        method='Radau',
+        t_eval = tspan,
+        r_tol=1e-6,
+        a_tol=1e-8,
+        args=(n,)
+        )
+            # Extract time and state vectors
+    return result
 
 
 
@@ -136,3 +184,13 @@ def initial_config(n):
     state0 = np.concatenate([q_rest_tiled, qn, zeros])
 
     return state0
+
+n_bodies = 2
+
+result = N_body_pendulum_2(n_bodies)
+print(result)
+
+SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
+plt.show()
+
+#SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,5]))
