@@ -185,7 +185,7 @@ def initial_config(n):
 
     return state0
 
-n_bodies = 20
+n_bodies = 5
 
 result = N_body_pendulum_2(n_bodies)
 #print(result)
