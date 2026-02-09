@@ -4,6 +4,7 @@ import numpy as np
 import soa as SOA
 from scipy.integrate import solve_ivp
 import plotting as SOAplt
+import time
 
 def N_body_pendulum(n):
     #setting up link
@@ -84,7 +85,7 @@ def N_body_pendulum(n):
             tau[i]   = tau_vec[3*(i-1):3*i]
 
         # Introducing damping (link closest to ground):
-        tau[n] = -1*beta[n]
+        #tau[n] = -1*beta[n]
 
         #storage
         P_plus = [None]*(n+2)
@@ -226,10 +227,13 @@ def rand_initial_config(n):
 
 n_bodies = 5
 
-
+start = time.perf_counter()
 
 result = N_body_pendulum(n_bodies)
-#print(result)
+
+end = time.perf_counter()
+
+print(f"Integration time: {end - start:.6f} seconds")
 
 #SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
 
