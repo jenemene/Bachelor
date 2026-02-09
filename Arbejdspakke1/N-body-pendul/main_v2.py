@@ -40,15 +40,9 @@ def N_body_pendulum_2(n):
 
     def ATBIalg(state,tau_vec,n):
         #setting up link
-<<<<<<< HEAD
         m = 20
         l_com = np.array([0,0,0.1])
         l_hinge = np.array([0,0,0.2])
-=======
-        m = 50
-        l_com = np.array([0,0,0.2])
-        l_hinge = np.array([0,0,0.5])
->>>>>>> 787fef136b89672c58d072e094e738397a1eeaef
         link = SOA.SimpleLink(m,l_com,l_hinge)
         link.set_hingemap("spherical")
 
@@ -163,11 +157,7 @@ def N_body_pendulum_2(n):
         return A,V,beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-<<<<<<< HEAD
     tspan = np.arange(0, 7,0.01)
-=======
-    tspan = np.arange(0, 30,0.03)
->>>>>>> 787fef136b89672c58d072e094e738397a1eeaef
     result = solve_ivp(
         odefun, 
         t_span=(0, tspan[-1]), 
@@ -237,8 +227,4 @@ result = N_body_pendulum_2(n_bodies)
 #SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
 
 
-<<<<<<< HEAD
 SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]))
-=======
-#SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]))
->>>>>>> 787fef136b89672c58d072e094e738397a1eeaef
