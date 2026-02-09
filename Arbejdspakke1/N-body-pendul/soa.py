@@ -174,7 +174,7 @@ def normalize_quaternions(q):
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
         
-def ATBI_N_body_pendulum(state,tau_vec,n,l_hinge,m,type="typeofhinge"):
+def ATBI_N_body_pendulum(state,tau_vec,n,link, RBT):
         #inputs
         #state: np.array on form [theta_dot, beta]
         #tau_vec: generalized forces as np.array
@@ -183,16 +183,6 @@ def ATBI_N_body_pendulum(state,tau_vec,n,l_hinge,m,type="typeofhinge"):
         #type: hinge-type for all links. Right now its purely spherical that is implemented
         #n: no_bodies
         #outputs beta_dot
-
-
-        #setting up link
-        l_com = l_hinge/2
-        link = SimpleLink(m,l_com,l_hinge)
-        link.set_hingemap(type)
-
-        #rigidbodytransform
-        RBT = RBT(l_hinge)
-        RBT_com = RBT(l_hinge)
 
         #unpacking state
         theta_vec = state[:4*n]
@@ -276,14 +266,14 @@ def ATBI_N_body_pendulum(state,tau_vec,n,l_hinge,m,type="typeofhinge"):
             pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
             cRp = pRc.T 
 
-            P = RBT@pRc@P_plus[k-1]@cRp@RBT.T + link.M
-            D = link.H@P@link.H.T
-            G[k] = P@link.H.T@np.linalg.inv(D)
-            tau_bar[k] = np.eye(6) - G[k]@link.H
-            P_plus[k] = tau_bar[k]@P
-            xi = RBT@pRc@xi_plus[k-1] + P@agothic[k] + bgothic[k]
-            eps = tau[k]-link.H@xi
-            nu[k] = np.linalg.inv(D)@eps
+            P = RBT @ pRc @ P_plus[k-1] @ cRp@RBT.T + link.M
+            D = link.H @ P @ link.H.T
+            G[k] = np.linalg.solve(D, link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
+            tau_bar[k] = np.eye(6) - G[k] @ link.H
+            P_plus[k] = tau_bar[k] @ P
+            xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
+            eps = tau[k] - link.H@xi
+            nu[k] = np.linalg.solve(D, eps) #= np.linalg.inv(D)@eps
             xi_plus[k] = xi + G[k]@eps
 
         #ATBI scatter
@@ -297,5 +287,5 @@ def ATBI_N_body_pendulum(state,tau_vec,n,l_hinge,m,type="typeofhinge"):
             beta_dot[k] = nu_bar - G[k].T @ A_plus 
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
-        return beta_dot #which is theta_ddot depending on how you look at it
+        return A, beta_dot #which is theta_ddot depending on how you look at it
     
