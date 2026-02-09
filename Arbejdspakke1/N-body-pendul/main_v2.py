@@ -8,7 +8,7 @@ import plotting as SOAplt
 
 def N_body_pendulum_2(n):
     
-    state0 = initial_config(n)
+    state0 = rand_initial_config(n)
 
     def odefun(t,state,n):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
@@ -41,8 +41,8 @@ def N_body_pendulum_2(n):
     def ATBIalg(state,tau_vec,n):
         #setting up link
         m = 20
-        l_com = np.array([0,0,2.5])
-        l_hinge = np.array([0,0,0.5])
+        l_com = np.array([0,0,0.1])
+        l_hinge = np.array([0,0,0.2])
         link = SOA.SimpleLink(m,l_com,l_hinge)
         link.set_hingemap("spherical")
 
@@ -78,7 +78,8 @@ def N_body_pendulum_2(n):
             beta[i]  = beta_vec[idxw:idxw+3]
             tau[i]   = tau_vec[3*(i-1):3*i]
 
-            
+        # Introducing damping (link closest to ground):
+        tau[n] = -1*beta[n]
 
         #storage
         P_plus = [None]*(n+2)
@@ -132,13 +133,13 @@ def N_body_pendulum_2(n):
             pRc = SOA.spatialrotfromquat(theta[k-1])
             cRp = pRc.T 
 
-            P = RBT@pRc@P_plus[k-1]@cRp@RBT.T + link.M
-            D = link.H@P@link.H.T
-            G[k] = P@link.H.T@np.linalg.inv(D)
-            tau_bar[k] = np.eye(6) - G[k]@link.H
-            P_plus[k] = tau_bar[k]@P
-            xi = RBT@pRc@xi_plus[k-1] + P@agothic[k] + bgothic[k]
-            eps = tau[k]-link.H@xi
+            P = RBT @ pRc @ P_plus[k-1] @ cRp@RBT.T + link.M
+            D = link.H @ P @ link.H.T
+            G[k] = P @ link.H.T @ np.linalg.inv(D)
+            tau_bar[k] = np.eye(6) - G[k] @ link.H
+            P_plus[k] = tau_bar[k] @ P
+            xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
+            eps = tau[k] - link.H@xi
             nu[k] = np.linalg.inv(D)@eps
             xi_plus[k] = xi + G[k]@eps
 
@@ -150,13 +151,13 @@ def N_body_pendulum_2(n):
 
             A_plus = cRp@ RBT.T @A[k+1]
             nu_bar = nu[k] - G[k].T @ g[k]  
-            beta_dot[k] = nu_bar - G[k].T @ A_plus - 0.2*beta[k] #dæmpning hvis man vil :)
+            beta_dot[k] = nu_bar - G[k].T @ A_plus
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
         return A,V,beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 200,0.03)
+    tspan = np.arange(0, 7,0.01)
     result = solve_ivp(
         odefun, 
         t_span=(0, tspan[-1]), 
@@ -185,7 +186,40 @@ def initial_config(n):
 
     return state0
 
-n_bodies = 5
+def custom_initial_config(n):
+    # Calculate initial config for n bodies
+    # q0: All aligned and tilted to some side
+    qn = SOA.quatfromrev(0.2, "y")
+    q_rest = SOA.quatfromrev(0.1, "y")
+    q_rest_tiled = np.tile(q_rest, n-1)
+    
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    zeros = np.zeros(3 * n)
+    
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_rest_tiled, qn, zeros])
+
+    return state0
+
+def rand_initial_config(n):
+    # Assumes that the system consists of spherical joints only
+    # Calculate random initial config for n bodies
+    q0 = np.zeros(4*n)
+    for i in range(n):
+        idxq = 4*i
+        q_random = np.random.randn(4)
+        q_random = q_random / np.linalg.norm(q_random) # Normalize to ensure it's a valid quaternion
+        q0[idxq:idxq+4] = q_random
+    
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    zeros = np.zeros(3 * n)
+    
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q0, zeros])
+
+    return state0
+
+n_bodies = 2
 
 result = N_body_pendulum_2(n_bodies)
 #print(result)
@@ -193,4 +227,4 @@ result = N_body_pendulum_2(n_bodies)
 SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
 
 
-SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.5]))
+SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]))
