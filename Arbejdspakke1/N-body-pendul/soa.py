@@ -174,5 +174,120 @@ def normalize_quaternions(q):
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
         
+def ATBI_N_body_pendulum(state,tau_vec,n):
+        #setting up link
+        m = 50
+        l_com = np.array([0,0,0.2])
+        l_hinge = np.array([0,0,0.5])
+        link = SimpleLink(m,l_com,l_hinge)
+        link.set_hingemap("spherical")
 
+        #rigidbodytransform
+        RBT = RBT(l_hinge)
+        RBT_com = RBT(l_hinge)
+
+        #unpacking state
+        theta_vec = state[:4*n]
+        beta_vec  = state[4*n:]
+
+        theta = [None]*(n+2)
+        beta  = [None]*(n+2)
+        tau   = [None]*(n+2)
+
+        # boundary conditions - det kan diskuteres om man behøver i begge ender for dem alle, det gør man vidst nok ikke
+        theta[0]   = np.zeros(4)
+        theta[n+1] = np.zeros(4)
+
+        beta[0]    = np.zeros(3)
+        beta[n+1]  = np.zeros(3)
+
+        tau[0]     = np.zeros(3)
+        tau[n+1]   = np.zeros(3)
+
+        #unpacking interior (IDK OM VI SKAL PASSE DOM EN FUCKING LISTE JEG FØLGER MIT RETARD MATLAB)
+        for i in range(1, n+1):
+
+            idxq = 4*(i-1)
+            idxw = 3*(i-1)
+
+            theta[i] = theta_vec[idxq:idxq+4]
+            beta[i]  = beta_vec[idxw:idxw+3]
+            tau[i]   = tau_vec[3*(i-1):3*i]
+
+            
+
+        #storage
+        P_plus = [None]*(n+2)
+        xi_plus = [None]*(n+2)
+        nu = [None]*(n+2)
+        A = [None]*(n+2)
+        V = [None]*(n+2)
+        G = [None]*(n+2)
+        beta_dot = [None]*(n+2)
+        tau_bar = [None]*(n+2)
+        agothic = [None]*(n+2)
+        bgothic = [None]*(n+2)
+        
+        #gravity and storage of gravity
+        g = [None]*(n+2)
+        g[n+1] = np.array([0,0,0,0,0,9.81]) #in inertial frame 
+
+        #boundary conditions on spatial operator quantities
+        P_plus[0] = np.zeros((6,6))
+        xi_plus[0] = np.zeros((6,))
+        tau_bar[0] = P_plus[0]
+        A[n+1] = np.array([0, 0, 0, 0, 0, 0])
+        V[n+1] = np.zeros((6,))
+
+        #kinematics scatter
+
+        for k in range(n,0,-1):
+            #rotation matrices
+            pRc = spatialrotfromquat(theta[k]) 
+            cRp = pRc.T #from parent to child -> this is the direction we are going right now
+
+            #rotating gravity such that we have that in frame aswell
+            g[k] = cRp@g[k+1]
+
+            #hinge contribtuion
+            delta_V = link.H.T @ beta[k]
+
+            #spatial velocity
+            V[k] = cRp @ RBT.T @ V[k+1] + delta_V
+
+            #coriolois acc
+            agothic[k] = spatialskewtilde(V[k]) @ link.H.T @ beta[k]
+
+            #gyroscopic term
+            bgothic[k] = spatialskewbar(V[k]) @ link.M @ V[k]
+
+        #ATBI gather 
+        for k in range(1,n+1): #n+1 as python does not include end index
+
+            #rotations
+            pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
+            cRp = pRc.T 
+
+            P = RBT@pRc@P_plus[k-1]@cRp@RBT.T + link.M
+            D = link.H@P@link.H.T
+            G[k] = P@link.H.T@np.linalg.inv(D)
+            tau_bar[k] = np.eye(6) - G[k]@link.H
+            P_plus[k] = tau_bar[k]@P
+            xi = RBT@pRc@xi_plus[k-1] + P@agothic[k] + bgothic[k]
+            eps = tau[k]-link.H@xi
+            nu[k] = np.linalg.inv(D)@eps
+            xi_plus[k] = xi + G[k]@eps
+
+        #ATBI scatter
+        for k in range(n,0,-1):
+            #rotations
+            pRc = spatialrotfromquat(theta[k])
+            cRp = pRc.T 
+
+            A_plus = cRp@ RBT.T @A[k+1]
+            nu_bar = nu[k] - G[k].T @ g[k]  
+            beta_dot[k] = nu_bar - G[k].T @ A_plus # 0.2*beta[k] #dæmpning hvis man vil :)
+            A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
+
+        return beta_dot #which is theta_ddot depending on how you look at it
     
