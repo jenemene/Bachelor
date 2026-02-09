@@ -1,16 +1,26 @@
 import matplotlib
-matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt 
 import numpy as np
 import soa as SOA
 from scipy.integrate import solve_ivp
 import plotting as SOAplt
 
-def N_body_pendulum_2(n):
-    
-    state0 = rand_initial_config(n)
+def N_body_pendulum(n):
+    #setting up link
+    m = 20
+    l_com = np.array([0,0,0.1])
+    l_hinge = np.array([0,0,0.2])
+    link = SOA.SimpleLink(m, l_com, l_hinge)
+    link.set_hingemap("spherical")
 
-    def odefun(t,state,n):
+    #RBT is constant
+    RBT = SOA.RBT(l_hinge)
+
+
+    #initial config
+    state0 = initial_config(n)
+
+    def odefun(t, state, n, link, RBT):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
 
         #unpacking state
@@ -30,7 +40,8 @@ def N_body_pendulum_2(n):
         #Calculationg of generalized accelerations (beta_dot) - this requires ATBI. 
         tau_vec = np.zeros_like(beta) #no external torques
 
-        A,V,beta_dot_list = ATBIalg(state,tau_vec,n)
+        A, V, beta_dot_list = ATBIalg(state, tau_vec, n, link, RBT)
+
 
         beta_dot = np.concatenate([b.flatten() for b in beta_dot_list[1:n+1]])
 
@@ -38,13 +49,7 @@ def N_body_pendulum_2(n):
 
         return state_dot
 
-    def ATBIalg(state,tau_vec,n):
-        #setting up link
-        m = 20
-        l_com = np.array([0,0,0.1])
-        l_hinge = np.array([0,0,0.2])
-        link = SOA.SimpleLink(m,l_com,l_hinge)
-        link.set_hingemap("spherical")
+    def ATBIalg(state, tau_vec, n, link, RBT):
 
         #rigidbodytransform
         RBT = SOA.RBT(l_hinge)
@@ -135,12 +140,12 @@ def N_body_pendulum_2(n):
 
             P = RBT @ pRc @ P_plus[k-1] @ cRp@RBT.T + link.M
             D = link.H @ P @ link.H.T
-            G[k] = P @ link.H.T @ np.linalg.inv(D)
+            G[k] = np.linalg.solve(D, link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
             tau_bar[k] = np.eye(6) - G[k] @ link.H
             P_plus[k] = tau_bar[k] @ P
             xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
             eps = tau[k] - link.H@xi
-            nu[k] = np.linalg.inv(D)@eps
+            nu[k] = np.linalg.solve(D, eps) #= np.linalg.inv(D)@eps
             xi_plus[k] = xi + G[k]@eps
 
         #ATBI scatter
@@ -157,14 +162,14 @@ def N_body_pendulum_2(n):
         return A,V,beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 7,0.01)
+    tspan = np.arange(0, 50,0.03)
     result = solve_ivp(
         odefun, 
         t_span=(0, tspan[-1]), 
         y0=state0, 
-        method='Radau',
+        method='DOP853',
         t_eval = tspan,
-        args=(n,)
+        args=(n,link,RBT)
         )
             # Extract time and state vectors
     return result
@@ -219,9 +224,11 @@ def rand_initial_config(n):
 
     return state0
 
-n_bodies = 2
+n_bodies = 5
 
-result = N_body_pendulum_2(n_bodies)
+
+
+result = N_body_pendulum(n_bodies)
 #print(result)
 
 #SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)

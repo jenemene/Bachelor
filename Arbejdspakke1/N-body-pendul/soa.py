@@ -174,13 +174,15 @@ def normalize_quaternions(q):
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
         
-def ATBI_N_body_pendulum(state,tau_vec,l_hinge,m,type="typeofhinge"):
+def ATBI_N_body_pendulum(state,tau_vec,n,l_hinge,m,type="typeofhinge"):
         #inputs
-        #state: np.array on form [theta_dot, beta_dot]
+        #state: np.array on form [theta_dot, beta]
         #tau_vec: generalized forces as np.array
         #l_hinge: vector from O_k to O+_k-1 in k frame (this doesnt matter as they are identical in our case)
         #m: mass of length. Ensure that you dont have a very long and slender link with a small mass to avoid very stiff elements
         #type: hinge-type for all links. Right now its purely spherical that is implemented
+        #n: no_bodies
+        #outputs beta_dot
 
 
         #setting up link
