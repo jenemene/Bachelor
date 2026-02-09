@@ -174,13 +174,19 @@ def normalize_quaternions(q):
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
         
-def ATBI_N_body_pendulum(state,tau_vec,n):
+def ATBI_N_body_pendulum(state,tau_vec,l_hinge,m,type="typeofhinge"):
+        #inputs
+        #state: np.array on form [theta_dot, beta_dot]
+        #tau_vec: generalized forces as np.array
+        #l_hinge: vector from O_k to O+_k-1 in k frame (this doesnt matter as they are identical in our case)
+        #m: mass of length. Ensure that you dont have a very long and slender link with a small mass to avoid very stiff elements
+        #type: hinge-type for all links. Right now its purely spherical that is implemented
+
+
         #setting up link
-        m = 50
-        l_com = np.array([0,0,0.2])
-        l_hinge = np.array([0,0,0.5])
+        l_com = l_hinge/2
         link = SimpleLink(m,l_com,l_hinge)
-        link.set_hingemap("spherical")
+        link.set_hingemap(type)
 
         #rigidbodytransform
         RBT = RBT(l_hinge)
@@ -204,7 +210,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n):
         tau[0]     = np.zeros(3)
         tau[n+1]   = np.zeros(3)
 
-        #unpacking interior (IDK OM VI SKAL PASSE DOM EN FUCKING LISTE JEG FØLGER MIT RETARD MATLAB)
+        #unpacking interior 
         for i in range(1, n+1):
 
             idxq = 4*(i-1)
@@ -214,7 +220,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n):
             beta[i]  = beta_vec[idxw:idxw+3]
             tau[i]   = tau_vec[3*(i-1):3*i]
 
-            
+         #if damping is to be implemented, then add a -b*beta[i] component in the for loop, or just do a simple tau[n] = -b*tau[n] if you only wish to damp body attatched to ground   
 
         #storage
         P_plus = [None]*(n+2)
@@ -286,7 +292,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n):
 
             A_plus = cRp@ RBT.T @A[k+1]
             nu_bar = nu[k] - G[k].T @ g[k]  
-            beta_dot[k] = nu_bar - G[k].T @ A_plus # 0.2*beta[k] #dæmpning hvis man vil :)
+            beta_dot[k] = nu_bar - G[k].T @ A_plus 
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
         return beta_dot #which is theta_ddot depending on how you look at it
