@@ -296,25 +296,35 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
     
 def omega(link,tau_bar,D,n):
     #calculating gamma for base link (then we dont even need a for loop)
-    gamma_n = link.H.T @ np.linalg.solve(D[n], link.H)
+    gamma = [None]*(n+2)
+    omega = [None]*(n+2)
+    
+    #boundary condition
+    gamma[n+1] = np.zeros((6,6))
+    omega[n+1] = np.zeros((6,6))
 
+    
+    for k in range (n,0,-1):
+    #calculating diagonal entries of omega
+        psi = link.RBT@tau_bar[k]
+        gamma[k] = psi.T@gamma[k+1]@psi + link.H.T@np.linalg.solve(D[k],link.H) #her mangler der rotationer :) Vi ganger noget fra k frame med noget i k +1 frame
 
-    #starting loop
-    omega = gamma_n
-    gamma = np.zeros((6,6))
+    #assining these
+    omega[n] = gamma[n]
+    #calculating off diagonal entries (and inserting the one on the dignoal)
+    
+    #calculating off diagnoal terms
 
-    for k in range(n,0,-1):
-        
-        psi = link.RBT @ tau_bar[k]
-        omega = omega @ psi
+    for k in range (n-1,0,-1):
+        psi = link.RBT@tau_bar[k]
+        omega[k] = omega[k+1]@psi #samme her. Vi mangler rotationer. omega[k+1] lever i k+1, men psi lever i k. Øv bøv og bussemand.
 
-        gamma = psi.T@gamma@psi +link.H.T @ np.linalg.solve(D[k], link.H)
+    omega_nn = gamma[n]
+    omega_n1 = omega[1]
+    omega_1n = omega_n1.T
+    omega_11 = gamma[1]
 
-    omega_n1 = omega
-    omega_nn = gamma_n
-    omega_11 = gamma
-
-    return omega_11, omega_nn, omega_n1
+    return omega_nn, omega_n1, omega_1n,omega_11
 
 def beta_dot_delta(tau_bar,link,n,D,f_c,G):
 

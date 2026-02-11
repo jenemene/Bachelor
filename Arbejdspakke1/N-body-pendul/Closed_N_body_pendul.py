@@ -36,15 +36,13 @@ def N_body_pendulum_closed(n):
         A_nd = np.concatenate([A_f[n],link.RBT.T @ A_f[1]])
 
         #Setting up Q. We are restricitig that the linear velocity has to be 0
-        u = np.block([[np.zeros((3,3)),np.zeros((3,3))],
-                        [np.zeros((3,3)),np.eye(3)]])
+        u = np.block([np.zeros((3,3)), np.eye(3)])
         Q = np.block([u,-u])
 
         #need to calculate LAMDA (the matrix thing). For that we need elements of OMEGA
-        omega_11, omega_nn, omega_n1 = SOA.omega(link,tau_bar,D,n)
-        omega_1n = omega_n1.T
+        omega_nn, omega_n1, omega_1n,omega_11= SOA.omega(link,tau_bar,D,n)
 
-        #hvis fejl så kig her
+        #calculating block entires
         LAMBDA_n1 = omega_n1@link.RBT
         LAMBDA_1n = link.RBT.T@omega_1n
         LAMBDA_11 = link.RBT.T@omega_11@link.RBT
@@ -52,11 +50,12 @@ def N_body_pendulum_closed(n):
 
         LAMBDA_block = np.block([[LAMBDA_nn,LAMBDA_n1],
                                 [LAMBDA_1n,LAMBDA_11]])
-
+        #print(LAMBDA_block)
+        print(LAMBDA_block)
         #calculate lambda (in this case the lagrange multipliers)
-        u = np.zeros(6) #tror vi
+        u = np.zeros(3,) #tror vi
         d_ddot = Q@A_nd + u
-        λ = np.linalg.solve(Q@LAMBDA_block@Q.T,d_ddot) #wtf er dimensionerne her? Må være 6x1
+        λ = np.linalg.solve(Q@LAMBDA_block@Q.T,d_ddot) #wtf er dimensionerne her? Må være 6x1 <-- De er 3x1 :) 
 
         #calculating f_c
         f_c_closed_loop_const = - Q.T@λ
@@ -102,7 +101,7 @@ def N_body_pendulum_closed(n):
 def custom_initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(np.pi/2, "y")
+    qn = SOA.quatfromrev(-np.pi/2, "y")
     q_tiled = np.tile(qn, n)
     
     # Create the zero vectors for the other initial velocities states (n, 3)

@@ -221,7 +221,7 @@ def rand_initial_config(n):
 
     return state0
 
-n_bodies = 4
+n_bodies = 1
 
 start = time.perf_counter()
 
