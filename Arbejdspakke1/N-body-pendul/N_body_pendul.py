@@ -9,9 +9,8 @@ import time
 def N_body_pendulum(n):
     #setting up link
     m = 200
-    l_com = np.array([0,0,0.1])
     l_hinge = np.array([0,0,0.2])
-    link = SOA.SimpleLink(m, l_com, l_hinge)
+    link = SOA.SimpleLink(m, l_hinge)
     link.set_hingemap("spherical")
 
     #RBT is constant
@@ -19,7 +18,7 @@ def N_body_pendulum(n):
 
 
     #initial config
-    state0 = initial_config(n)
+    state0 = custom_initial_config(n)
 
     def odefun(t, state, n, link, RBT):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
@@ -52,9 +51,6 @@ def N_body_pendulum(n):
 
     def ATBIalg(state, tau_vec, n, link, RBT):
 
-        #rigidbodytransform
-        RBT = SOA.RBT(l_hinge)
-        RBT_com = SOA.RBT(l_hinge)
         #unpacking state
 
         theta_vec = state[:4*n]
@@ -195,8 +191,8 @@ def initial_config(n):
 def custom_initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(0.2, "y")
-    q_rest = SOA.quatfromrev(0.1, "y")
+    qn = SOA.quatfromrev(0, "y")
+    q_rest = SOA.quatfromrev(0, "y")
     q_rest_tiled = np.tile(q_rest, n-1)
     
     # Create the zero vectors for the other initial velocities states (n, 3)
@@ -225,7 +221,7 @@ def rand_initial_config(n):
 
     return state0
 
-n_bodies = 3
+n_bodies = 4
 
 start = time.perf_counter()
 

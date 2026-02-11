@@ -141,11 +141,11 @@ def quatfromrev(theta,axis="axis of orientation"):
     return q
 
 class SimpleLink:
-    def __init__(self,m,l_com,l_hinge):
+    def __init__(self,m,l_hinge):
 
         #adding attribtues to object
         self.m = m
-        self.l_com = l_com
+        self.l_com = l_hinge/2
         self.l_hinge = l_hinge
 
         #calculating geometry (right now width and heigh of link is just 1/10 of length)
@@ -158,7 +158,10 @@ class SimpleLink:
         self.M_c =  np.block([[self.J_c, np.zeros((3,3))],
                           [np.zeros((3,3)), m*np.eye(3)]])
     
-        self.M = RBT(l_com)@self.M_c@RBT(l_com).T #spatial inertia at body frame (located at hinge)
+        self.M = RBT(self.l_com)@self.M_c@RBT(self.l_com).T #spatial inertia at body frame (located at hinge)
+
+        #rigidbody transform across link
+        self.RBT = RBT(l_hinge)
     
     def set_hingemap(self,type="hingetype"):
         if type == "spherical":
@@ -174,7 +177,7 @@ def normalize_quaternions(q):
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
         
-def ATBI_N_body_pendulum(state,tau_vec,n,link, RBT):
+def ATBI_N_body_pendulum(state,tau_vec,n,link):
         #inputs
         #state: np.array on form [theta_dot, beta]
         #tau_vec: generalized forces as np.array
@@ -182,6 +185,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link, RBT):
         #m: mass of length. Ensure that you dont have a very long and slender link with a small mass to avoid very stiff elements
         #type: hinge-type for all links. Right now its purely spherical that is implemented
         #n: no_bodies
+        #link: Instantiate a link using the SimpleLink class and pass it
         #outputs beta_dot
 
         #unpacking state
@@ -221,6 +225,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link, RBT):
         A = [None]*(n+2)
         V = [None]*(n+2)
         G = [None]*(n+2)
+        D = [None]*(n+2)
         beta_dot = [None]*(n+2)
         tau_bar = [None]*(n+2)
         agothic = [None]*(n+2)
@@ -251,7 +256,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link, RBT):
             delta_V = link.H.T @ beta[k]
 
             #spatial velocity
-            V[k] = cRp @ RBT.T @ V[k+1] + delta_V
+            V[k] = cRp @ link.RBT.T @ V[k+1] + delta_V
 
             #coriolois acc
             agothic[k] = spatialskewtilde(V[k]) @ link.H.T @ beta[k]
@@ -266,14 +271,14 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link, RBT):
             pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
             cRp = pRc.T 
 
-            P = RBT @ pRc @ P_plus[k-1] @ cRp@RBT.T + link.M
-            D = link.H @ P @ link.H.T
-            G[k] = np.linalg.solve(D, link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
+            P = link.RBT @ pRc @ P_plus[k-1] @ cRp@link.RBT.T + link.M
+            D[k] = link.H @ P @ link.H.T
+            G[k] = np.linalg.solve(D[k], link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
             tau_bar[k] = np.eye(6) - G[k] @ link.H
             P_plus[k] = tau_bar[k] @ P
-            xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
+            xi = link.RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
             eps = tau[k] - link.H@xi
-            nu[k] = np.linalg.solve(D, eps) #= np.linalg.inv(D)@eps
+            nu[k] = np.linalg.solve(D[k], eps) #= np.linalg.inv(D)@eps
             xi_plus[k] = xi + G[k]@eps
 
         #ATBI scatter
@@ -282,10 +287,68 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link, RBT):
             pRc = spatialrotfromquat(theta[k])
             cRp = pRc.T 
 
-            A_plus = cRp@ RBT.T @A[k+1]
+            A_plus = cRp@ link.RBT.T @A[k+1]
             nu_bar = nu[k] - G[k].T @ g[k]  
             beta_dot[k] = nu_bar - G[k].T @ A_plus 
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
-        return A, beta_dot #which is theta_ddot depending on how you look at it
+        return A, V, beta_dot,tau_bar,D,G #which is theta_ddot depending on how you look at it
     
+def omega(link,tau_bar,D,n):
+    #calculating gamma for base link (then we dont even need a for loop)
+    gamma_n = link.H.T @ np.linalg.solve(D[n], link.H)
+
+
+    #starting loop
+    omega = gamma_n
+    gamma = np.zeros((6,6))
+
+    for k in range(n,0,-1):
+        
+        psi = link.RBT @ tau_bar[k]
+        omega = omega @ psi
+
+        gamma = psi.T@gamma@psi +link.H.T @ np.linalg.solve(D[k], link.H)
+
+    omega_n1 = omega
+    omega_nn = gamma_n
+    omega_11 = gamma
+
+    return omega_11, omega_nn, omega_n1
+
+def beta_dot_delta(tau_bar,link,n,D,f_c,G):
+
+    #f_c comes with RBT already applied where nessecary
+
+    xi_delta = [None]*(n+2)
+    beta_dot_delta = [None] * (n+2)
+    nu = [None]*(n+2)
+    lambda_list = [None]*(n+2) #NOT TO BE CONFUSED WITH LAGRANGE MULTIPLIERS; THIS IS JUST THE NOTATION FROM THE BOOK
+
+
+    #boundary cond on xi_delta and lambda_list
+    xi_delta[0] = np.zeros(6,1)
+    lambda_list[n+1] = np.zeros(6,1)
+
+    for k in range (0,n+1):
+        psi = link.RBT @ tau_bar[k-1]
+        xi_delta[k] = psi@xi_delta[k-1] - f_c[k]
+
+        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k])
+
+    for k in range(n,0,-1):
+        psi = link.RBT @ tau_bar[k]
+        kappa = link.RBT @ G[k]
+
+        lambda_list[k] = psi.T@lambda_list[k+1] + link.H.T@nu[k]
+
+
+        beta_dot_delta[k] = nu[k] - kappa.T@lambda_list[k+1]
+
+    return beta_dot_delta
+
+
+    
+
+
+        
