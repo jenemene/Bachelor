@@ -8,7 +8,7 @@ import time
 
 def N_body_pendulum(n):
     #setting up link
-    m = 20
+    m = 200
     l_com = np.array([0,0,0.1])
     l_hinge = np.array([0,0,0.2])
     link = SOA.SimpleLink(m, l_com, l_hinge)
@@ -225,7 +225,7 @@ def rand_initial_config(n):
 
     return state0
 
-n_bodies = 5
+n_bodies = 3
 
 start = time.perf_counter()
 
