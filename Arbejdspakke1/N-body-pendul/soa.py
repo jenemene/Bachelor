@@ -294,30 +294,42 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
 
         return A, V, beta_dot,tau_bar,D,G #which is theta_ddot depending on how you look at it
     
-def omega(link,tau_bar,D,n):
-    #calculating gamma for base link (then we dont even need a for loop)
+def omega(theta_vec,link,tau_bar,D,n):
+    #unpacking generalized coordinates
+    theta = [None]*(n+2)
+    theta[0] = np.zeros(4)
+    theta[n+1] = np.zeros(4)
+
+    #unpacking interior 
+    for i in range(1, n+1):
+        idxq = 4*(i-1)
+        theta[i] = theta_vec[idxq:idxq+4]
+
+    #space allocation
     gamma = [None]*(n+2)
     omega = [None]*(n+2)
     
     #boundary condition
     gamma[n+1] = np.zeros((6,6))
-    omega[n+1] = np.zeros((6,6))
-
     
     for k in range (n,0,-1):
     #calculating diagonal entries of omega
-        psi = link.RBT@tau_bar[k]
-        gamma[k] = psi.T@gamma[k+1]@psi + link.H.T@np.linalg.solve(D[k],link.H) #her mangler der rotationer :) Vi ganger noget fra k frame med noget i k +1 frame
+        pRc = spatialrotfromquat(theta[k]) #rotations
+        cRp = pRc.T
+        psi = link.RBT @ tau_bar[k]
+        gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H) # hvis fejl, tjek rotationer her
 
-    #assining these
+    #assigning these
     omega[n] = gamma[n]
-    #calculating off diagonal entries (and inserting the one on the dignoal)
-    
-    #calculating off diagnoal terms
 
+    #calculating off diagonal entries (and inserting the one on the dignoal)
+        
+    #de to loops kan nok godt kombineres. 
     for k in range (n-1,0,-1):
+        pRc = spatialrotfromquat(theta[k]) #rotations
+        cRp = pRc.T
         psi = link.RBT@tau_bar[k]
-        omega[k] = omega[k+1]@psi #samme her. Vi mangler rotationer. omega[k+1] lever i k+1, men psi lever i k. Øv bøv og bussemand.
+        omega[k] = cRp @ omega[k+1] @ pRc @ psi #samme her. Vi mangler rotationer. omega[k+1] lever i k+1, men psi lever i k. Øv bøv og bussemand.
 
     omega_nn = gamma[n]
     omega_n1 = omega[1]
@@ -326,7 +338,18 @@ def omega(link,tau_bar,D,n):
 
     return omega_nn, omega_n1, omega_1n,omega_11
 
-def beta_dot_delta(tau_bar,link,n,D,f_c,G):
+def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
+
+    #unpacking generalized coordinates
+    theta = [None]*(n+2)
+    theta[0] = np.zeros(4)
+    theta[n+1] = np.zeros(4)
+
+    #unpacking interior 
+    for i in range(1, n+1):
+        idxq = 4*(i-1)
+        theta[i] = theta_vec[idxq:idxq+4]
+
 
     #f_c comes with RBT already applied where nessecary
 
@@ -337,27 +360,66 @@ def beta_dot_delta(tau_bar,link,n,D,f_c,G):
 
 
     #boundary cond on xi_delta and lambda_list
-    xi_delta[0] = np.zeros(6,1)
-    lambda_list[n+1] = np.zeros(6,1)
+    xi_delta[0] = np.zeros(6,)
+    lambda_list[n+1] = np.zeros(6,)
 
-    for k in range (0,n+1):
+    for k in range (1,n+1):
+        pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
+        cRp = pRc.T 
         psi = link.RBT @ tau_bar[k-1]
-        xi_delta[k] = psi@xi_delta[k-1] - f_c[k]
-
+        xi_delta[k] = pRc@psi@xi_delta[k-1] - f_c[k]
         nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k])
 
     for k in range(n,0,-1):
+        pRc = spatialrotfromquat(theta[k]) 
+        cRp = pRc.T      
         psi = link.RBT @ tau_bar[k]
         kappa = link.RBT @ G[k]
 
-        lambda_list[k] = psi.T@lambda_list[k+1] + link.H.T@nu[k]
+        lambda_list[k] = psi.T @ cRp @lambda_list[k+1] + link.H.T@nu[k]
 
 
-        beta_dot_delta[k] = nu[k] - kappa.T@lambda_list[k+1]
+        beta_dot_delta[k] = nu[k] - kappa.T@cRp@lambda_list[k+1]
 
     return beta_dot_delta
 
+def get_rotation_tip_to_body_n(theta_vec, n):
+    # Args:
+    # theta_vec: Flattened state vector of quaternions
+    # n: number of bodies (where body 1 is tip, body n is connected to base)
+    
+    # Returns:
+    # R_total: 3x3 Rotation matrix representing rotation of Body 1 w.r.t Body n
 
+    # --- Unpacking generalized coordinates ---
+    theta = [None]*(n+2)
+    theta[0] = np.zeros(4) # Dummy
+    theta[n+1] = np.zeros(4) # Dummy
+
+    # Unpacking interior 
+    for i in range(1, n+1):
+        idxq = 4*(i-1)
+        theta[i] = theta_vec[idxq:idxq+4]
+    
+    # --- Calculation of Cumulative Rotation ---
+    
+    # Initialize total rotation as Identity (Body 1 in Body 1 frame)
+    R_total = np.eye(3) 
+
+    # Loop from 1 up to n-1
+    # We use theta[k] which describes orientation of k relative to k+1 (parent)
+    # Chain: R_n1 = R_n,n-1 @ ... @ R_3,2 @ R_2,1
+    
+    for k in range(1, n): 
+        # Calculate rotation R_{k+1, k} (Parent-from-Child)
+        pRc = rotfromquat(theta[k]) 
+        
+        # Accumulate: New_Total = Current_Link_Rotation @ Old_Total
+        # This builds the chain: R_{k+1, 1} = R_{k+1, k} @ R_{k, 1}
+        R_total = pRc @ R_total
+
+    return np.block([[R_total, np.zeros((3,3))],
+                    [np.zeros((3,3)),R_total]])
     
 
 

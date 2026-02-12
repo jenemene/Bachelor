@@ -9,7 +9,7 @@ import time
 def N_body_pendulum(n):
     #setting up link
     m = 200
-    l_hinge = np.array([0,0,0.2])
+    l_hinge = np.array([0,0,0.5])
     link = SOA.SimpleLink(m, l_hinge)
     link.set_hingemap("spherical")
 
@@ -18,7 +18,7 @@ def N_body_pendulum(n):
 
 
     #initial config
-    state0 = custom_initial_config(n)
+    state0 = initial_config(n)
 
     def odefun(t, state, n, link, RBT):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
@@ -28,7 +28,7 @@ def N_body_pendulum(n):
         beta = state[4*n:]
 
         #normalizing quartenions
-        #SOA.normalize_quaternions(theta)
+        SOA.normalize_quaternions(theta)
         
         #calculating theta_dot based on the derrivmap function
         theta_dot = np.zeros(len(theta))
@@ -159,7 +159,7 @@ def N_body_pendulum(n):
         return A,V,beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 50,0.03)
+    tspan = np.arange(0, 30,0.03)
     result = solve_ivp(
         odefun, 
         t_span=(0, tspan[-1]), 
@@ -176,7 +176,7 @@ def N_body_pendulum(n):
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(3*np.pi/4, "y")
+    qn = SOA.quatfromrev(3*np.pi/6, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -203,6 +203,20 @@ def custom_initial_config(n):
 
     return state0
 
+def custom_initial_config2(n):
+    # Calculate initial config for n bodies
+    # q0: All aligned and tilted to some side
+    qn = SOA.quatfromrev(-np.pi/2, "y")
+    q_tiled = np.tile(qn, n)
+    
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    zeros = np.zeros(3 * n)
+    
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_tiled, zeros])
+
+    return state0
+
 def rand_initial_config(n):
     # Assumes that the system consists of spherical joints only
     # Calculate random initial config for n bodies
@@ -221,7 +235,7 @@ def rand_initial_config(n):
 
     return state0
 
-n_bodies = 1
+n_bodies = 7
 
 start = time.perf_counter()
 

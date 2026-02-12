@@ -31,42 +31,45 @@ def N_body_pendulum_closed(n):
 
         beta_dot_f = np.concatenate([b.flatten() for b in beta_dot_f_list[1:n+1]])
 
-        #Calculation of A_nd (V_nd is not needed as Q is constant)
-        
-        A_nd = np.concatenate([A_f[n],link.RBT.T @ A_f[1]])
+        #Calculation of A_nd (V_nd is not needed as Q is constant) 
+
+        nR1 = SOA.get_rotation_tip_to_body_n(theta, n) #rotations to to ensure we are consistent with frames
+        A_nd = np.concatenate([A_f[n],nR1 @ link.RBT.T @ A_f[1]])
+
 
         #Setting up Q. We are restricitig that the linear velocity has to be 0
         u = np.block([np.zeros((3,3)), np.eye(3)])
         Q = np.block([u,-u])
 
         #need to calculate LAMDA (the matrix thing). For that we need elements of OMEGA
-        omega_nn, omega_n1, omega_1n,omega_11= SOA.omega(link,tau_bar,D,n)
+        omega_nn, omega_n1, omega_1n,omega_11= SOA.omega(theta,link,tau_bar,D,n)
 
-        #calculating block entires
-        LAMBDA_n1 = omega_n1@link.RBT
-        LAMBDA_1n = link.RBT.T@omega_1n
-        LAMBDA_11 = link.RBT.T@omega_11@link.RBT
+        #calculating block entires and rotating to frame n
+        LAMBDA_n1 = nR1 @ omega_n1 @ link.RBT
+        LAMBDA_1n = nR1 @ link.RBT.T @ omega_1n
+        LAMBDA_11 = nR1@link.RBT.T@omega_11@link.RBT
         LAMBDA_nn = omega_nn
 
         LAMBDA_block = np.block([[LAMBDA_nn,LAMBDA_n1],
                                 [LAMBDA_1n,LAMBDA_11]])
         #print(LAMBDA_block)
-        print(LAMBDA_block)
+        
+        
         #calculate lambda (in this case the lagrange multipliers)
         u = np.zeros(3,) #tror vi
         d_ddot = Q@A_nd + u
         λ = np.linalg.solve(Q@LAMBDA_block@Q.T,d_ddot) #wtf er dimensionerne her? Må være 6x1 <-- De er 3x1 :) 
 
         #calculating f_c
-        f_c_closed_loop_const = - Q.T@λ
-        f_c = [np.zeros((6, 1)) for _ in range(n+2)]
+        f_c_closed_loop_const =  - Q.T@λ
+        f_c_closed_loop_const = np.zeros(12,)
+        f_c = [np.zeros(6,) for _ in range(n+2)]
 
         f_c[n] = f_c_closed_loop_const[:6]
-        f_c[1] = link.RBT @ f_c_closed_loop_const[6:]
+        f_c[1] = link.RBT @ nR1.T @ f_c_closed_loop_const[6:]
 
-
-        #calculatign beta_dot_delta
-        beta_dot_delta_list = SOA.beta_dot_delta(tau_bar,link,n,D,f_c,G) #returns a list
+        #calculating beta_dot_delta
+        beta_dot_delta_list = SOA.beta_dot_delta(theta,tau_bar,link,n,D,f_c,G) #returns a list
         
         beta_dot_delta = np.concatenate([b.flatten() for b in beta_dot_delta_list[1:n+1]])
 
@@ -91,7 +94,7 @@ def N_body_pendulum_closed(n):
         ODEfun, 
         t_span=(0, tspan[-1]), 
         y0=state0, 
-        method='DOP853',
+        method='Radau',
         t_eval = tspan,
         args=(n,link)
         )
@@ -112,6 +115,22 @@ def custom_initial_config(n):
 
     return state0
 
+def initial_config(n):
+    # Calculate initial config for n bodies
+    # q0: All aligned and tilted to some side
+    qn = SOA.quatfromrev(3*np.pi/4, "y")
+    q_rest = np.array([0,0,0,1])
+    q_rest_tiled = np.tile(q_rest, n-1)
+    
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    zeros = np.zeros(3 * n)
+    
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_rest_tiled, qn, zeros])
+
+    return state0
+
+
 #ONLY for 4 links right now due to initial config.
 n_bodies = 4
 
@@ -120,5 +139,7 @@ start = time.perf_counter()
 result = N_body_pendulum_closed(n_bodies)
 
 end = time.perf_counter()
+
+print(result)
 
 SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]))
