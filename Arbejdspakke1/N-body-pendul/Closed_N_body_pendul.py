@@ -62,7 +62,6 @@ def N_body_pendulum_closed(n):
 
         #calculating f_c
         f_c_closed_loop_const =  - Q.T@λ
-        f_c_closed_loop_const = np.zeros(12,)
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
         f_c[n] = f_c_closed_loop_const[:6]
