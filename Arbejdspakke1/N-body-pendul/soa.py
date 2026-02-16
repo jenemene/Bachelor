@@ -423,8 +423,10 @@ def get_rotation_tip_to_body_I(theta_vec, n):
 
     return R
 
+
+
 def compute_pos(theta_vec, l_vec, n):
-    theta = [None]*(n+2)
+    theta = [None]*(n+1)
 
     #unpacking interior 
     for i in range(1, n+1):
@@ -432,48 +434,26 @@ def compute_pos(theta_vec, l_vec, n):
         theta[i] = theta_vec[idxq:idxq+4]
 
     positions = [None]*(n+1)
+
     #BC for positions
     positions[n] = np.zeros(3)
-    
-    R_cumulative = np.eye(3)
 
-    for i in range(n,0,-1):
-        pRc = rotfromquat(theta[i])
-        R_cumulative = R_cumulative @ pRc
-        positions[i-1] = positions[i] + R_cumulative @ l_vec
+    for i in range(n-1,0,-1):
+        if i == n-1:
+            l_vec_hinge = rotfromquat(theta[i+1]).T @ l_vec
+        else:
+            l_vec_hinge = l_vec
+        
+        cRp = rotfromquat(theta[i]).T
+
+        positions[i] = cRp @ (positions[i+1] + l_vec_hinge)
 
     return positions
 
 
-def compute_positions(state_k, l_vec, n): # Byg den her funktion fra bunden selv!!!
-
-    quat_block_size = 4 * n
-
-    quat_block = state_k[:quat_block_size]
-
-    quats = [
-        quat_block[4*i:4*(i+1)]
-        for i in range(n)
-    ]
-
-    R_cumulative = []
-    R = np.eye(3)
-
-    for q in reversed(quats):
-        R = R @ rotfromquat(q)
-        R_cumulative.insert(0, R.copy())
-
-    positions = [np.zeros(3)]
-
-    for i in range(n):
-        positions.append(
-            positions[-1] + R_cumulative[i] @ l_vec
-        )
-
-    return np.array(positions)
 
 def baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta):
 
-    return Φ_ddot - 2*alpha * Φ - beta**2 * Φ_dot
+    return Φ_ddot + (2*alpha * Φ) + (beta**2 * Φ_dot)
 
     

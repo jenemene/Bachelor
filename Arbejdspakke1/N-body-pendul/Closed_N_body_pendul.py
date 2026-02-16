@@ -61,13 +61,13 @@ def N_body_pendulum_closed(n):
         l_IO1 = positions[1]
         IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
         
-        Φ = - (l_IO1 + IR1[:3, :3]@link.l_hinge)
+        Φ = - IR1[:3, :3]@(l_IO1 + link.l_hinge)
 
-        Φ_dot = - ( IωIO@(l_IO1+IR1[:3, :3]@link.l_hinge) + IR1[:3,:3]@V_f[1][3:] )
+        Φ_dot = - ( IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + IR1[:3,:3]@V_f[1][3:] )
 
-        Φ_ddot = -( SOA.skewfromvec(IR1[:3, :3]@A_f[1][3:])@(l_IO1+IR1[:3, :3]@link.l_hinge) + IωIO@IωIO@(l_IO1+IR1[:3, :3]@link.l_hinge) + 2*IωIO@IR1[:3,:3]@V_f[1][3:] + IR1[:3,:3]@A_f[1][3:] )
+        Φ_ddot = -( SOA.skewfromvec(IR1[:3, :3]@A_f[1][3:])@IR1[:3, :3]@(l_IO1+link.l_hinge) + IωIO@IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + 2*IωIO@IR1[:3,:3]@V_f[1][3:] + IR1[:3,:3]@A_f[1][3:] )
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 2, 2) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 0, 0) # Parametrene er vi slet ikke sikker på)
 
         #d_ddot = 0*Q@A_nd - (u_dot)
 
