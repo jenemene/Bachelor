@@ -422,7 +422,28 @@ def get_rotation_tip_to_body_I(theta_vec, n):
                     [np.zeros((3,3)),R_total]])
 
     return R
-    
+
+def compute_pos(theta_vec, l_vec, n):
+    theta = [None]*(n+2)
+
+    #unpacking interior 
+    for i in range(1, n+1):
+
+        idxq = 4*(i-1)
+
+        theta[i] = theta_vec[idxq:idxq+4]
+
+    positions = [None]*(n+1)
+     #BC for positions
+    positions[n] = np.zeros(3)
+
+    for i in range(n-1,0,-1):
+        pRc = rotfromquat(theta[i+1]).T
+        positions[i] = positions[i+1] + pRc @ l_vec
+
+    return positions
+
+
 def compute_positions(state_k, l_vec, n): # Byg den her funktion fra bunden selv!!!
 
     quat_block_size = 4 * n
