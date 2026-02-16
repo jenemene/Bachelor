@@ -428,18 +428,19 @@ def compute_pos(theta_vec, l_vec, n):
 
     #unpacking interior 
     for i in range(1, n+1):
-
         idxq = 4*(i-1)
-
         theta[i] = theta_vec[idxq:idxq+4]
 
     positions = [None]*(n+1)
-     #BC for positions
+    #BC for positions
     positions[n] = np.zeros(3)
+    
+    R_cumulative = np.eye(3)
 
-    for i in range(n-1,0,-1):
-        pRc = rotfromquat(theta[i+1]).T
-        positions[i] = positions[i+1] + pRc @ l_vec
+    for i in range(n,0,-1):
+        pRc = rotfromquat(theta[i])
+        R_cumulative = R_cumulative @ pRc
+        positions[i-1] = positions[i] + R_cumulative @ l_vec
 
     return positions
 
