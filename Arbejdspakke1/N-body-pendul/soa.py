@@ -438,15 +438,10 @@ def compute_pos(theta_vec, l_vec, n):
     #BC for positions
     positions[n] = np.zeros(3)
 
-    for i in range(n-1,0,-1):
-        if i == n-1:
-            l_vec_hinge = rotfromquat(theta[i+1]).T @ l_vec
-        else:
-            l_vec_hinge = l_vec
-        
+    for i in range(n-1,0,-1):        
         cRp = rotfromquat(theta[i]).T
 
-        positions[i] = cRp @ (positions[i+1] + l_vec_hinge)
+        positions[i] = cRp @ (positions[i+1] + l_vec)
 
     return positions
 
