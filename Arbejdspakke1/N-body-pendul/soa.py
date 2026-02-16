@@ -317,7 +317,7 @@ def omega(theta_vec,link,tau_bar,D,n):
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
         psi = link.RBT @ tau_bar[k]
-        gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H) # hvis fejl, tjek rotationer her
+        gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H)
 
     #assigning these
     omega[n] = gamma[n]
@@ -329,7 +329,7 @@ def omega(theta_vec,link,tau_bar,D,n):
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
         psi = link.RBT@tau_bar[k]
-        omega[k] = cRp @ omega[k+1] @ pRc @ psi #samme her. Vi mangler rotationer. omega[k+1] lever i k+1, men psi lever i k. Øv bøv og bussemand.
+        omega[k] = cRp @ omega[k+1] @ pRc @ psi
 
     omega_nn = gamma[n]
     omega_n1 = omega[1]
