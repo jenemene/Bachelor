@@ -426,6 +426,13 @@ def get_rotation_tip_to_body_I(theta_vec, n):
 
 
 def compute_pos(theta_vec, l_vec, n):
+    # Args:
+    # theta_vec: Flattened state vector of quaternions
+    # l_vec: Vector from O_k to O+_k-1 in k frame (same for all links)
+    # n: number of bodies (where body 1 is tip, body n is connected to base)
+    # Returns:
+    # positions: List of 3D position vectors of each body frame in body frame (where position of body k is position of O_k in k frame)
+
     theta = [None]*(n+1)
 
     #unpacking interior 
