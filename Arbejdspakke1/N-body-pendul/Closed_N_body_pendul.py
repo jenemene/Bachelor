@@ -55,7 +55,7 @@ def N_body_pendulum_closed(n):
                                 [LAMBDA_1n,LAMBDA_11]]) 
         
 
-        #setting up d_ddot #her for u er der noget ala -*- giver plus agtigt.
+        #setting up d_ddot #her for u er der noget ala -*- giver plus agtigt. #Jeg er overbevist om at Q@A_nd ikke skal være der.
         u_dot = IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@IR1[:3, :3]@link.l_hinge 
 
         d_ddot = 0*Q@A_nd + (u_dot)
@@ -106,7 +106,7 @@ def N_body_pendulum_closed(n):
 def custom_initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(-np.pi/2, "y")
+    qn = SOA.quatfromrev(np.pi/2, "y")
     q_tiled = np.tile(qn, n)
     
     # Create the zero vectors for the other initial velocities states (n, 3)
