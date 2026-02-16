@@ -56,7 +56,7 @@ def N_body_pendulum_closed(n):
         #setting up d_ddot #her for u er der noget ala -*- giver plus agtigt. #Jeg er overbevist om at Q@A_nd ikke skal være der.
         #u_dot = IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@IR1[:3, :3]@link.l_hinge 
 
-        positions = SOA.compute_pos(state, link.l_hinge, n)
+        positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
 
         l_IO1 = positions[1]
         IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])

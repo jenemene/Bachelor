@@ -423,9 +423,31 @@ def get_rotation_tip_to_body_I(theta_vec, n):
 
     return R
 
+def compute_pos_in_inertial_frame(theta_vec, l_vec, n):
 
+    theta = [None]*(n+1)
 
-def compute_pos(theta_vec, l_vec, n):
+    #unpacking interior 
+    for i in range(1, n+1):
+        idxq = 4*(i-1)
+        theta[i] = theta_vec[idxq:idxq+4]
+
+    positions = [None]*(n+1)
+
+    #BC for position of base body
+    positions[n] = np.zeros(3)
+
+    R_cumulative = rotfromquat(theta[n]) #initial rotation from body n to inertial frame
+
+    for i in range(n-1,0,-1):        
+        pRc = rotfromquat(theta[i])
+
+        positions[i] = positions[i+1] + R_cumulative @ l_vec
+        R_cumulative = R_cumulative @ pRc
+
+    return positions
+
+def compute_pos_in_body_frame(theta_vec, l_vec, n):
     # Args:
     # theta_vec: Flattened state vector of quaternions
     # l_vec: Vector from O_k to O+_k-1 in k frame (same for all links)
