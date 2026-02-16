@@ -418,9 +418,40 @@ def get_rotation_tip_to_body_I(theta_vec, n):
         # This builds the chain: R_{k+1, 1} = R_{k+1, k} @ R_{k, 1}
         R_total = pRc @ R_total
 
-    return np.block([[R_total, np.zeros((3,3))],
+    R = np.block([[R_total, np.zeros((3,3))],
                     [np.zeros((3,3)),R_total]])
+
+    return R
     
+def compute_positions(state_k, l_vec, n): # Byg den her funktion fra bunden selv!!!
 
+    quat_block_size = 4 * n
 
-        
+    quat_block = state_k[:quat_block_size]
+
+    quats = [
+        quat_block[4*i:4*(i+1)]
+        for i in range(n)
+    ]
+
+    R_cumulative = []
+    R = np.eye(3)
+
+    for q in reversed(quats):
+        R = R @ rotfromquat(q)
+        R_cumulative.insert(0, R.copy())
+
+    positions = [np.zeros(3)]
+
+    for i in range(n):
+        positions.append(
+            positions[-1] + R_cumulative[i] @ l_vec
+        )
+
+    return np.array(positions)
+
+def baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta):
+
+    return Φ_ddot - 2*alpha * Φ - beta**2 * Φ_dot
+
+    

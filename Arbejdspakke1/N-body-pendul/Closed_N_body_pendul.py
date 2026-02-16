@@ -35,7 +35,7 @@ def N_body_pendulum_closed(n):
 
         IR1 = SOA.get_rotation_tip_to_body_I(theta, n) #rotations to to ensure we are consistent with frames
         IRn = SOA.spatialrotfromquat(theta[4*(n-1):4*(n-1)+4])
-        A_nd = np.concatenate([IRn @ A_f[n],IR1 @ link.RBT.T @ A_f[1]]) # Hvis denne bruges, så tjek her om den er i rigtig rækkefølge ift. Q og udledning.
+        #A_nd = np.concatenate([IRn @ A_f[n],IR1 @ link.RBT.T @ A_f[1]]) # Hvis denne bruges, så tjek her om den er i rigtig rækkefølge ift. Q og udledning.
 
         #Setting up Q. We are restricitig that the linear velocity has to be 0
         d = np.block([np.zeros((3,3)), np.eye(3)])
@@ -54,12 +54,25 @@ def N_body_pendulum_closed(n):
                                 [Λ_1n,Λ_11]]) 
         
         #setting up d_ddot #her for u er der noget ala -*- giver plus agtigt. #Jeg er overbevist om at Q@A_nd ikke skal være der.
-        u_dot = IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@IR1[:3, :3]@link.l_hinge 
+        #u_dot = IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@IR1[:3, :3]@link.l_hinge 
 
-        d_ddot = 0*Q@A_nd - (u_dot)
+        positions = SOA.compute_positions(state, link.l_hinge, n)
+
+        l_IO1 = positions[-1]
+        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
+        
+        Φ = - IR1[:3, :3]@(l_IO1 + link.l_hinge)
+
+        Φ_dot = - ( IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + IR1[:3,:3]@V_f[1][3:] )
+
+        Φ_ddot = -( SOA.skewfromvec(IR1[:3, :3]@A_f[1][3:])@IR1[:3, :3]@(l_IO1+link.l_hinge) + IωIO@IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + 2*IωIO@IR1[:3,:3]@V_f[1][3:] + IR1[:3,:3]@A_f[1][3:] )
+
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 20, 2) # Parametrene er vi slet ikke sikker på)
+
+        #d_ddot = 0*Q@A_nd - (u_dot)
 
         #solving for lagrange multipliers
-        λ = np.linalg.solve(Q@Λ_block@Q.T,d_ddot) #wtf er dimensionerne her? Må være 6x1 <-- De er 3x1 :) 
+        λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
 
         #calculating f_c
         f_c_closed_loop_const = - Q.T@λ
@@ -88,13 +101,13 @@ def N_body_pendulum_closed(n):
     #initial config.
     state0 = custom_initial_config(n)
     
-    tspan = np.arange(0, 10,0.001)
+    tspan = np.arange(0, 10, 0.001)
     
     result = solve_ivp(
         ODEfun, 
         t_span=(0, tspan[-1]), 
         y0=state0, 
-        method='RK45',
+        method='DOP853',
         t_eval = tspan,
         args=(n,link)
         )
