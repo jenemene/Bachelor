@@ -15,7 +15,7 @@ def N_body_pendulum_closed(n):
         beta = state[4*n:]
 
         #normalizing quartenions
-        #SOA.normalize_quaternions(theta)
+        SOA.normalize_quaternions(theta)
         
         #calculating theta_dot based on the derrivmap function
         theta_dot = np.zeros(len(theta))
@@ -33,39 +33,42 @@ def N_body_pendulum_closed(n):
 
         #Calculation of A_nd (V_nd is not needed as Q is constant) 
 
-        nR1 = SOA.get_rotation_tip_to_body_n(theta, n) #rotations to to ensure we are consistent with frames
-        A_nd = np.concatenate([A_f[n],nR1 @ link.RBT.T @ A_f[1]])
+        IR1 = SOA.get_rotation_tip_to_body_I(theta, n) #rotations to to ensure we are consistent with frames
+        IRn = SOA.spatialrotfromquat(theta[4*(n-1):4*(n-1)+4])
+        A_nd = np.concatenate([IRn@A_f[n],IR1 @ link.RBT.T @ A_f[1]])
 
 
         #Setting up Q. We are restricitig that the linear velocity has to be 0
-        u = np.block([np.zeros((3,3)), np.eye(3)])
-        Q = np.block([u,-u])
+        d = np.block([np.zeros((3,3)), np.eye(3)])
+        Q = np.block([d,-d])
 
         #need to calculate LAMDA (the matrix thing). For that we need elements of OMEGA
         omega_nn, omega_n1, omega_1n,omega_11= SOA.omega(theta,link,tau_bar,D,n)
 
-        #calculating block entires and rotating to frame n
-        LAMBDA_n1 = nR1 @ omega_n1 @ link.RBT
-        LAMBDA_1n = nR1 @ link.RBT.T @ omega_1n
-        LAMBDA_11 = nR1@link.RBT.T@omega_11@link.RBT
-        LAMBDA_nn = omega_nn
+        #calculating block entires and rotating to frame I
+        LAMBDA_n1 = IR1 @ omega_n1 @ link.RBT
+        LAMBDA_1n = IR1 @ link.RBT.T @ omega_1n
+        LAMBDA_11 = IR1@link.RBT.T@omega_11@link.RBT
+        LAMBDA_nn = IRn@omega_nn
 
         LAMBDA_block = np.block([[LAMBDA_nn,LAMBDA_n1],
-                                [LAMBDA_1n,LAMBDA_11]])
-        #print(LAMBDA_block)
+                                [LAMBDA_1n,LAMBDA_11]]) 
         
-        
-        #calculate lambda (in this case the lagrange multipliers)
-        u = np.zeros(3,) #tror vi
-        d_ddot = Q@A_nd + u
+
+        #setting up d_ddot #her for u er der noget ala -*- giver plus agtigt.
+        u_dot = IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@IR1[:3, :3]@link.l_hinge 
+
+        d_ddot = 0*Q@A_nd + (u_dot)
+
+        #solving for lagrange multipliers
         λ = np.linalg.solve(Q@LAMBDA_block@Q.T,d_ddot) #wtf er dimensionerne her? Må være 6x1 <-- De er 3x1 :) 
 
         #calculating f_c
         f_c_closed_loop_const =  - Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
-        f_c[n] = f_c_closed_loop_const[:6]
-        f_c[1] = link.RBT @ nR1.T @ f_c_closed_loop_const[6:]
+        f_c[n] = IRn.T@f_c_closed_loop_const[:6]
+        f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const[6:]
 
         #calculating beta_dot_delta
         beta_dot_delta_list = SOA.beta_dot_delta(theta,tau_bar,link,n,D,f_c,G) #returns a list
@@ -87,13 +90,13 @@ def N_body_pendulum_closed(n):
     #initial config.
     state0 = custom_initial_config(n)
     
-    tspan = np.arange(0, 10,0.03)
+    tspan = np.arange(0, 10,0.001)
     
     result = solve_ivp(
         ODEfun, 
         t_span=(0, tspan[-1]), 
         y0=state0, 
-        method='Radau',
+        method='RK45',
         t_eval = tspan,
         args=(n,link)
         )

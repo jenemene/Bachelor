@@ -383,7 +383,7 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
 
     return beta_dot_delta
 
-def get_rotation_tip_to_body_n(theta_vec, n):
+def get_rotation_tip_to_body_I(theta_vec, n):
     # Args:
     # theta_vec: Flattened state vector of quaternions
     # n: number of bodies (where body 1 is tip, body n is connected to base)
@@ -410,7 +410,7 @@ def get_rotation_tip_to_body_n(theta_vec, n):
     # We use theta[k] which describes orientation of k relative to k+1 (parent)
     # Chain: R_n1 = R_n,n-1 @ ... @ R_3,2 @ R_2,1
     
-    for k in range(1, n): 
+    for k in range(1, n+1): 
         # Calculate rotation R_{k+1, k} (Parent-from-Child)
         pRc = rotfromquat(theta[k]) 
         
