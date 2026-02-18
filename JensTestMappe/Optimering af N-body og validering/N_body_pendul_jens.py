@@ -177,8 +177,8 @@ def N_body_pendulum(n):
     #         # Extract time and state vectors
     # return result
 
-    tspan = np.arange(0, 200,0.03)
-    result,V_values = SOA.RK4_int(odefun,state0,tspan,n,link,RBT)
+    tspan = np.arange(0, 10,0.03)
+    result,V_values = SOA.RK4_int_with_V(odefun,state0,tspan,n,link,RBT)
 
     return result,tspan,V_values
 
