@@ -57,8 +57,7 @@ def spatialskewbar(X):
     X_bar = np.block([[skewfromvec(X[:3]),skewfromvec(X[3:])],
              [np.zeros((3,3)),skewfromvec(X[:3])]])
     return X_bar
-
-    
+  
 def spatialskewtilde(spatialvec):
     #Convert a 6D spatial vector to a 6x6 skew-symmetric matrix.
 
@@ -233,7 +232,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         
         #gravity and storage of gravity
         g = [None]*(n+2)
-        g[n+1] = np.array([0,0,0,0,0,9.81]) #in inertial frame 
+        g[n+1] = 0*np.array([0,0,0,0,0,9.81]) #in inertial frame 
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
@@ -328,7 +327,7 @@ def omega(theta_vec,link,tau_bar,D,n):
     for k in range (n-1,0,-1):
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
-        psi = link.RBT@tau_bar[k]
+        psi = link.RBT @ tau_bar[k]
         omega[k] = cRp @ omega[k+1] @ pRc @ psi
 
     omega_nn = gamma[n]
@@ -474,10 +473,8 @@ def compute_pos_in_body_frame(theta_vec, l_vec, n):
 
     return positions
 
-
-
 def baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta):
 
-    return Φ_ddot + (2*alpha * Φ) + (beta**2 * Φ_dot)
+    return Φ_ddot + (2*alpha * Φ_dot) + (beta**2 * Φ)
 
     

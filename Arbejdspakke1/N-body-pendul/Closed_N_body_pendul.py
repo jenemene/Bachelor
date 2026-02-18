@@ -1,6 +1,8 @@
 import matplotlib
+from matplotlib.pylab import norm
 import matplotlib.pyplot as plt 
 import numpy as np
+from traitlets import link
 import soa as SOA
 from scipy.integrate import solve_ivp
 import plotting as SOAplt
@@ -15,7 +17,7 @@ def N_body_pendulum_closed(n):
         beta = state[4*n:]
 
         #normalizing quartenions
-        SOA.normalize_quaternions(theta)
+        theta = SOA.normalize_quaternions(theta)
         
         #calculating theta_dot based on the derrivmap function
         theta_dot = np.zeros(len(theta))
@@ -42,34 +44,34 @@ def N_body_pendulum_closed(n):
         Q = np.block([d,-d])
 
         #need to calculate LAMDA (the matrix thing). For that we need elements of OMEGA
-        omega_nn, omega_n1, omega_1n,omega_11= SOA.omega(theta,link,tau_bar,D,n)
+        omega_nn, omega_n1, omega_1n, omega_11= SOA.omega(theta,link,tau_bar,D,n)
 
         #calculating block entires and rotating to frame I
-        Λ_n1 = IR1 @ omega_n1 @ link.RBT
-        Λ_1n = IR1 @ link.RBT.T @ omega_1n
-        Λ_11 = IR1 @ link.RBT.T @ omega_11 @ link.RBT
-        Λ_nn = IRn @ omega_nn
-
+        #Λ_n1 = IR1 @ omega_n1 @ link.RBT
+        Λ_n1= IRn @ omega_n1 @ (IR1 @ link.RBT)
+        #Λ_1n = IR1 @ link.RBT.T @ omega_1n
+        Λ_1n = (IR1 @ link.RBT).T @ omega_1n @ IRn.T
+        #Λ_11 = IR1 @ link.RBT.T @ omega_11 @ link.RBT
+        Λ_11 = (IR1 @ link.RBT).T @ omega_11 @ (IR1 @ link.RBT)
+        Λ_nn = IRn @ omega_nn @ IRn.T
+        
         Λ_block = np.block([[Λ_nn,Λ_n1],
                                 [Λ_1n,Λ_11]]) 
         
-        #setting up d_ddot #her for u er der noget ala -*- giver plus agtigt. #Jeg er overbevist om at Q@A_nd ikke skal være der.
-        #u_dot = IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@SOA.skewfromvec(IR1[:3, :3]@V_f[1][:3])@IR1[:3, :3]@link.l_hinge 
-
         positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
 
         l_IO1 = positions[1]
         IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
         
-        Φ = - IR1[:3, :3]@(l_IO1 + link.l_hinge)
-
-        Φ_dot = - ( IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + IR1[:3,:3]@V_f[1][3:] )
-
-        Φ_ddot = -( SOA.skewfromvec(IR1[:3, :3]@A_f[1][3:])@IR1[:3, :3]@(l_IO1+link.l_hinge) + IωIO@IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + 2*IωIO@IR1[:3,:3]@V_f[1][3:] + IR1[:3,:3]@A_f[1][3:] )
+        # OLD: Φ = - IR1[:3, :3]@(l_IO1 + link.l_hinge)
+        # OLD: Φ_dot = - ( IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + IR1[:3,:3]@V_f[1][3:] )
+        # OLD: Φ_ddot = -( SOA.skewfromvec(IR1[:3, :3]@A_f[1][3:])@IR1[:3, :3]@(l_IO1+link.l_hinge) + IωIO@IωIO@IR1[:3, :3]@(l_IO1+link.l_hinge) + 2*IωIO@IR1[:3,:3]@V_f[1][3:] + IR1[:3,:3]@A_f[1][3:] )
+    
+        Φ = - l_IO1 - IR1[:3, :3]@link.l_hinge
+        Φ_dot = - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
+        Φ_ddot = - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][3:])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
 
         f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 0, 0) # Parametrene er vi slet ikke sikker på)
-
-        #d_ddot = 0*Q@A_nd - (u_dot)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -79,17 +81,17 @@ def N_body_pendulum_closed(n):
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
         f_c[n] = IRn.T @ f_c_closed_loop_const[:6]
-        f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const[6:]
+        f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const[6:] # SKAL VÆRE SÅDAN HER!!!
 
         #calculating beta_dot_delta
         beta_dot_delta_list = SOA.beta_dot_delta(theta,tau_bar,link,n,D,f_c,G) #returns a list
-        
+
         beta_dot_delta = np.concatenate([b.flatten() for b in beta_dot_delta_list[1:n+1]])
 
         beta_dot = beta_dot_delta + beta_dot_f
 
         state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
-
+        
         return state_dot
     
     #setting up link
@@ -99,52 +101,55 @@ def N_body_pendulum_closed(n):
     link.set_hingemap("spherical")
 
     #initial config.
-    state0 = custom_initial_config(n)
+    state0 = N4_initial_config(n)
     
-    tspan = np.arange(0, 10, 0.001)
-    
+    tspan = np.arange(0, 10, 0.01)
+
     result = solve_ivp(
-        ODEfun, 
+        ODEfun,
         t_span=(0, tspan[-1]), 
         y0=state0, 
-        method='DOP853',
-        t_eval = tspan,
-        args=(n,link)
+        method='Radau',
+        t_eval=tspan,
+        args=(n, link),
         )
-            # Extract time and state vectors
-    return result
+    return result # Extract time and state vectors
 
-def custom_initial_config(n):
+#ONLY for 4 links right now due to initial config.
+def N4_initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
     qn = SOA.quatfromrev(np.pi/2, "y")
-    q_tiled = np.tile(qn, n)
+    q_all = np.tile(qn, n)
     
     # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
-    
+    ωn = np.array([0,np.pi/10,0])
+    ω1 = np.zeros(3)
+    ω1_tiled = np.tile(ω1, n-1)
+    ω_all = np.concatenate([ω1_tiled, ωn])
+
     # Concatenate into one long state vector
-    state0 = np.concatenate([q_tiled, zeros])
+    state0 = np.concatenate([q_all, ω_all])
 
     return state0
 
-def initial_config(n):
+# ONLY for 2 links right now due to initial config.
+def N2_initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(3*np.pi/4, "y")
-    q_rest = np.array([0,0,0,1])
-    q_rest_tiled = np.tile(q_rest, n-1)
+    qn = SOA.quatfromrev(np.pi/2, "y")
+    q1 = SOA.quatfromrev(np.pi, "y")
+    q_all = np.concatenate([q1, qn])
     
     # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
-    
+    ωn = np.array([0,np.pi,0])
+    ω1 = np.zeros(3)
+    ω_all = np.concatenate([ω1, ωn])
     # Concatenate into one long state vector
-    state0 = np.concatenate([q_rest_tiled, qn, zeros])
+    state0 = np.concatenate([q_all, ω_all])
 
     return state0
 
-
-#ONLY for 4 links right now due to initial config.
 n_bodies = 4
 
 start = time.perf_counter()
@@ -153,8 +158,11 @@ result = N_body_pendulum_closed(n_bodies)
 
 end = time.perf_counter()
 
+print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
-
-print(result)
+print(f"Success: {result.success}")
+print(f"Solver status: {result.message}")
+print(f"Number of function evaluations: {result.nfev}")
+print("========================================================================================")
 
 SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]))
