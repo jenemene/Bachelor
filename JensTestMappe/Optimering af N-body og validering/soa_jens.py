@@ -102,11 +102,11 @@ def derrivmap(theta,omega,type="type of joint"):
     #returns:
     #derrivative of generalized coordiantes (theta_dot) - flattened, i.e of shape (N,)
 
+    omega = omega.reshape(3,1)
     
     if type == "revolute":
         derriv = omega
     elif type == "spherical":
-        omega = omega.reshape(3,1)
         derriv = 0.5*np.block([[-skewfromvec(omega.flatten()), omega],
                                [-omega.T, 0]]) @ theta.reshape(4,1)
 
@@ -423,8 +423,9 @@ def get_rotation_tip_to_body_I(theta_vec, n):
 
     return R
 
-def compute_pos(theta_vec, l_vec, n):
-    theta = [None]*(n+2)
+def compute_pos_in_inertial_frame(theta_vec, l_vec, n):
+
+    theta = [None]*(n+1)
 
     #unpacking interior 
     for i in range(1, n+1):
@@ -432,49 +433,52 @@ def compute_pos(theta_vec, l_vec, n):
         theta[i] = theta_vec[idxq:idxq+4]
 
     positions = [None]*(n+1)
+
+    #BC for position of base body
+    positions[n] = np.zeros(3)
+
+    R_cumulative = rotfromquat(theta[n]) #initial rotation from body n to inertial frame
+
+    for i in range(n-1,0,-1):        
+        pRc = rotfromquat(theta[i])
+
+        positions[i] = positions[i+1] + R_cumulative @ l_vec
+        R_cumulative = R_cumulative @ pRc
+
+    return positions
+
+def compute_pos_in_body_frame(theta_vec, l_vec, n):
+    # Args:
+    # theta_vec: Flattened state vector of quaternions
+    # l_vec: Vector from O_k to O+_k-1 in k frame (same for all links)
+    # n: number of bodies (where body 1 is tip, body n is connected to base)
+    # Returns:
+    # positions: List of 3D position vectors of each body frame in body frame (where position of body k is position of O_k in k frame)
+
+    theta = [None]*(n+1)
+
+    #unpacking interior 
+    for i in range(1, n+1):
+        idxq = 4*(i-1)
+        theta[i] = theta_vec[idxq:idxq+4]
+
+    positions = [None]*(n+1)
+
     #BC for positions
     positions[n] = np.zeros(3)
-    
-    R_cumulative = np.eye(3)
 
-    for i in range(n,0,-1):
-        pRc = rotfromquat(theta[i])
-        R_cumulative = R_cumulative @ pRc
-        positions[i-1] = positions[i] + R_cumulative @ l_vec
+    for i in range(n-1,0,-1):        
+        cRp = rotfromquat(theta[i]).T
+
+        positions[i] = cRp @ (positions[i+1] + l_vec)
 
     return positions
 
 
-def compute_positions(state_k, l_vec, n): # Byg den her funktion fra bunden selv!!!
-
-    quat_block_size = 4 * n
-
-    quat_block = state_k[:quat_block_size]
-
-    quats = [
-        quat_block[4*i:4*(i+1)]
-        for i in range(n)
-    ]
-
-    R_cumulative = []
-    R = np.eye(3)
-
-    for q in reversed(quats):
-        R = R @ rotfromquat(q)
-        R_cumulative.insert(0, R.copy())
-
-    positions = [np.zeros(3)]
-
-    for i in range(n):
-        positions.append(
-            positions[-1] + R_cumulative[i] @ l_vec
-        )
-
-    return np.array(positions)
 
 def baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta):
 
-    return Φ_ddot + 2*alpha * Φ + beta**2 * Φ_dot
+    return Φ_ddot + (2*alpha * Φ) + (beta**2 * Φ_dot)
 
 
 def FE_int(odefun,initial_cond,time_vec,n,link,RBT):
@@ -554,5 +558,4 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n,link,RBT):
     _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link, RBT)
 
     return Y, V_storage
-
-
+    
