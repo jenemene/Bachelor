@@ -57,8 +57,7 @@ def spatialskewbar(X):
     X_bar = np.block([[skewfromvec(X[:3]),skewfromvec(X[3:])],
              [np.zeros((3,3)),skewfromvec(X[:3])]])
     return X_bar
-
-    
+  
 def spatialskewtilde(spatialvec):
     #Convert a 6D spatial vector to a 6x6 skew-symmetric matrix.
 
@@ -316,8 +315,12 @@ def omega(theta_vec,link,tau_bar,D,n):
     #calculating diagonal entries of omega
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
-        psi = link.RBT @ tau_bar[k]
-        gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H)
+        #psi = link.RBT @ tau_bar[k]
+        #gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H)
+
+        ##### ---------- ÆNDRET LINJER MED NYE ROTATIONER, GAMLE LINJE ER OVER DENNE --------------------------
+        gamma[k] = tau_bar[k].T @ cRp @ link.RBT.T @ gamma[k+1] @ link.RBT @ pRc @ tau_bar[k] + link.H.T @ np.linalg.solve(D[k],link.H)
+        ##### -------------------------------------------------------------------------------------------------  
 
     #assigning these
     omega[n] = gamma[n]
@@ -328,7 +331,7 @@ def omega(theta_vec,link,tau_bar,D,n):
     for k in range (n-1,0,-1):
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
-        psi = link.RBT@tau_bar[k]
+        psi = link.RBT @ tau_bar[k]
         omega[k] = cRp @ omega[k+1] @ pRc @ psi
 
     omega_nn = gamma[n]
@@ -389,7 +392,7 @@ def get_rotation_tip_to_body_I(theta_vec, n):
     # n: number of bodies (where body 1 is tip, body n is connected to base)
     
     # Returns:
-    # R_total: 3x3 Rotation matrix representing rotation of Body 1 w.r.t Body n
+    # R_total: 6x6 Rotation matrix representing rotation of Body 1 w.r.t Body n
 
     # --- Unpacking generalized coordinates ---
     theta = [None]*(n+2)
@@ -474,11 +477,10 @@ def compute_pos_in_body_frame(theta_vec, l_vec, n):
 
     return positions
 
-
-
 def baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta):
 
-    return Φ_ddot + (2*alpha * Φ) + (beta**2 * Φ_dot)
+    return Φ_ddot + (2*alpha * Φ_dot) + (beta**2 * Φ)
+
 
 
 def FE_int(odefun,initial_cond,time_vec,n,link,RBT):
@@ -495,7 +497,7 @@ def FE_int(odefun,initial_cond,time_vec,n,link,RBT):
 
     return Y
 
-def RK4_int(odefun, initial_cond, time_vec, n,link,RBT):
+def RK4_int(odefun, initial_cond, time_vec, n,link):
     time_vec = np.asarray(time_vec)
     y0 = np.asarray(initial_cond).reshape(-1)
 
@@ -513,10 +515,10 @@ def RK4_int(odefun, initial_cond, time_vec, n,link,RBT):
         t = time_vec[i]
         y = Y[:, i]
 
-        k1 = odefun(t,y,n,link,RBT)
-        k2 = odefun(t + dt/2.0,y + dt/2.0 * k1,n,link,RBT)
-        k3 = odefun(t + dt/2.0,y + dt/2.0 * k2,n,link,RBT)
-        k4 = odefun(t + dt,y + dt * k3,n,link,RBT)
+        k1 = odefun(t,y,n,link)
+        k2 = odefun(t + dt/2.0,y + dt/2.0 * k1,n,link)
+        k3 = odefun(t + dt/2.0,y + dt/2.0 * k2,n,link)
+        k4 = odefun(t + dt,y + dt * k3,n,link)
 
         Y[:, i+1] = y + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
 
