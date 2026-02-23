@@ -63,7 +63,7 @@ def N_body_pendulum_closed(n):
 
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 5) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 20) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -127,8 +127,8 @@ def N_body_pendulum_closed(n):
         method='Radau',
         t_eval=tspan,
         args=(n, link),
-        rtol=1e-6,
-        atol=1e-9
+        rtol=1e-9,
+        atol=1e-12
         )
     
     return result
