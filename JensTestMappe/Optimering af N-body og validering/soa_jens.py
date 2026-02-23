@@ -222,7 +222,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0.5 # Damping coefficient
+            b = 0.05 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
