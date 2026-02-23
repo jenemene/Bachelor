@@ -169,9 +169,10 @@ class SimpleLink:
             print("right now i have only specified for spherical joints")
 
 def normalize_quaternions(q):
-    #takes a vector of stacked quartenions and normalized them. fully vectorized.
-    q = np.asarray(q)
-    q_reshaped = q.reshape(-1, 4)
+    # ADD copy=True to protect your RK4 state!
+    q_safe = np.array(q, copy=True) 
+    
+    q_reshaped = q_safe.reshape(-1, 4)
     norms = np.linalg.norm(q_reshaped, axis=1, keepdims=True)
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
@@ -232,7 +233,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         
         #gravity and storage of gravity
         g = [None]*(n+2)
-        g[n+1] = 0*np.array([0,0,0,0,0,9.81]) #in inertial frame 
+        g[n+1] = np.array([0,0,0,0,0,0*9.81]) #in inertial frame 
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
@@ -315,8 +316,12 @@ def omega(theta_vec,link,tau_bar,D,n):
     #calculating diagonal entries of omega
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
-        psi = link.RBT @ tau_bar[k]
-        gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H)
+        #psi = link.RBT @ tau_bar[k]
+        #gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H)
+
+        ##### ---------- ÆNDRET LINJER MED NYE ROTATIONER, GAMLE LINJE ER OVER DENNE --------------------------
+        gamma[k] = tau_bar[k].T @ cRp @ link.RBT.T @ gamma[k+1] @ link.RBT @ pRc @ tau_bar[k] + link.H.T @ np.linalg.solve(D[k],link.H)
+        ##### -------------------------------------------------------------------------------------------------  
 
     #assigning these
     omega[n] = gamma[n]
@@ -365,20 +370,18 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
     for k in range (1,n+1):
         pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
         cRp = pRc.T 
-        psi = link.RBT @ tau_bar[k-1]
-        xi_delta[k] = pRc@psi@xi_delta[k-1] - f_c[k]
-        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k])
+        
+        xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] - f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her
+        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k]) #skulle være ok den her linje
 
     for k in range(n,0,-1):
         pRc = spatialrotfromquat(theta[k]) 
         cRp = pRc.T      
-        psi = link.RBT @ tau_bar[k]
-        kappa = link.RBT @ G[k]
 
-        lambda_list[k] = psi.T @ cRp @lambda_list[k+1] + link.H.T@nu[k]
+        lambda_list[k] = tau_bar[k].T @ cRp @ link.RBT.T @ lambda_list[k+1]+ link.H.T@nu[k]
 
 
-        beta_dot_delta[k] = nu[k] - kappa.T@cRp@lambda_list[k+1]
+        beta_dot_delta[k] = nu[k] - G[k].T@cRp@link.RBT.T@lambda_list[k+1]
 
     return beta_dot_delta
 
@@ -388,7 +391,7 @@ def get_rotation_tip_to_body_I(theta_vec, n):
     # n: number of bodies (where body 1 is tip, body n is connected to base)
     
     # Returns:
-    # R_total: 3x3 Rotation matrix representing rotation of Body 1 w.r.t Body n
+    # R_total: 6x6 Rotation matrix representing rotation of Body 1 w.r.t Body n
 
     # --- Unpacking generalized coordinates ---
     theta = [None]*(n+2)
@@ -477,4 +480,81 @@ def baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta):
 
     return Φ_ddot + (2*alpha * Φ_dot) + (beta**2 * Φ)
 
+
+
+def FE_int(odefun,initial_cond,time_vec,n,link,RBT):
+    dt = time_vec[1] - time_vec[0] # calculation of timestep
+    N = len(time_vec) #amount of time steps
+    m = len(initial_cond) #size of result vectors for each timestep
+
+    Y = np.zeros((m,N)) #intializing storage array
+
+    Y[:,0] = initial_cond #intialzing initial cond
+
+    for i in range(N-1):
+        Y[:,i+1] = Y[:,i] + dt * odefun(time_vec[i],Y[:,i],n,link,RBT)
+
+    return Y
+
+def RK4_int(odefun, initial_cond, time_vec, n,link):
+    time_vec = np.asarray(time_vec)
+    y0 = np.asarray(initial_cond).reshape(-1)
+
+    dt = time_vec[1] - time_vec[0]
+    N  = len(time_vec)
+    m  = len(y0)
+
+    Y = np.zeros((m, N))
+    Y[:, 0] = y0
+
+    # initial V - spatial vel
+
+
+    for i in range(N - 1):
+        t = time_vec[i]
+        y = Y[:, i]
+
+        k1 = odefun(t,y,n,link)
+        k2 = odefun(t + dt/2.0,y + dt/2.0 * k1,n,link)
+        k3 = odefun(t + dt/2.0,y + dt/2.0 * k2,n,link)
+        k4 = odefun(t + dt,y + dt * k3,n,link)
+
+        Y[:, i+1] = y + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
+ 
+    return Y
+
+def RK4_int_with_V(odefun, initial_cond, time_vec, n,link,RBT):
+    time_vec = np.asarray(time_vec)
+    y0 = np.asarray(initial_cond).reshape(-1)
+
+    dt = time_vec[1] - time_vec[0]
+    N  = len(time_vec)
+    m  = len(y0)
+
+    Y = np.zeros((m, N))
+    Y[:, 0] = y0
+
+    #for storing spatial velcoities
+    V_storage = [None]*N
+
+    # initial V - spatial vel
+
+
+
+    for i in range(N - 1):
+        t = time_vec[i]
+        y = Y[:, i]
+
+        k1,V_val = odefun(t,y,n,link,RBT)
+        k2,_ = odefun(t + dt/2.0,y + dt/2.0 * k1,n,link,RBT)
+        k3,_ = odefun(t + dt/2.0,y + dt/2.0 * k2,n,link,RBT)
+        k4,_ = odefun(t + dt,y + dt * k3,n,link,RBT)
+
+        Y[:, i+1] = y + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
+        V_storage[i] = V_val
+
+    #filling in last timestep 
+    _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link, RBT)
+
+    return Y, V_storage
     

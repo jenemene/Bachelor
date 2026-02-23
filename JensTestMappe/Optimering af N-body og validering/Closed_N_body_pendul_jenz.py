@@ -63,7 +63,7 @@ def N_body_pendulum_closed(n):
 
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 50, 5) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 5) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -107,7 +107,7 @@ def N_body_pendulum_closed(n):
 
     
     #setting up link
-    m = 20 #mass in kg
+    m = 2 #mass in kg
     l_hinge = np.array([0,0,0.2])
     link = SOA.SimpleLink(m,l_hinge)
     link.set_hingemap("spherical")
@@ -115,7 +115,7 @@ def N_body_pendulum_closed(n):
     #initial config.
     state0 = N4_initial_config(n)
     
-    tspan = np.arange(0, 40, 0.001)
+    tspan = np.arange(0, 10, 0.001)
     #result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
 
     # Extract time and state vectors
@@ -163,7 +163,7 @@ def N2_initial_config(n):
     # Create the zero vectors for the other initial velocities states (n, 3)
     ωn = np.array([0,np.pi,0])
     ω1 = np.zeros(3)
-    ω_all = np.concatenate([ω1, ωn]) # <------------------- Jeg har lige sat den til 0 :)
+    ω_all = np.concatenate([ω1, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
     # Concatenate into one long state vector
     state0 = np.concatenate([q_all, ω_all])
 

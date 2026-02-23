@@ -216,7 +216,17 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             beta[i]  = beta_vec[idxw:idxw+3]
             tau[i]   = tau_vec[3*(i-1):3*i]
 
-         #if damping is to be implemented, then add a -b*beta[i] component in the for loop, or just do a simple tau[n] = -b*tau[n] if you only wish to damp body attatched to ground   
+         #if damping is to be implemented, then add a -b*beta[i] component in the for loop, or just do a simple tau[n] = -b*beta[n] if you only wish to damp body attatched to ground   
+
+        for i in range(1, n+1):
+            # ... unpacking idx ...
+            
+            # Calculate damping torque (viscous friction)
+            b = 0.5 # Damping coefficient
+            damping_tau = -b * beta[i]
+            
+            # Add it to any other external torques (currently zero)
+            tau[i] = tau_vec[3*(i-1):3*i] + damping_tau
 
         #storage
         P_plus = [None]*(n+2)
@@ -235,6 +245,9 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         g = [None]*(n+2)
         g[n+1] = np.array([0,0,0,0,0,0*9.81]) #in inertial frame 
 
+        g_f = [None]*(n+2)
+        g_f[n+1] = np.array([0,0,0,0,0,9.81])
+
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
@@ -251,6 +264,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
 
             #rotating gravity such that we have that in frame aswell
             g[k] = cRp@g[k+1]
+            g_f[k] = cRp@g_f[k+1]
 
             #hinge contribtuion
             delta_V = link.H.T @ beta[k]
@@ -276,7 +290,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             G[k] = np.linalg.solve(D[k], link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
             tau_bar[k] = np.eye(6) - G[k] @ link.H
             P_plus[k] = tau_bar[k] @ P
-            xi = link.RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
+            xi = link.RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] - RBT(link.l_com)@link.M@g_f[k]
             eps = tau[k] - link.H@xi
             nu[k] = np.linalg.solve(D[k], eps) #= np.linalg.inv(D)@eps
             xi_plus[k] = xi + G[k]@eps
@@ -289,7 +303,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
 
             A_plus = cRp@ link.RBT.T @A[k+1]
             nu_bar = nu[k] - G[k].T @ g[k]  
-            beta_dot[k] = nu_bar - G[k].T @ A_plus 
+            beta_dot[k] = nu_bar - G[k].T @ A_plus
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
         return A, V, beta_dot,tau_bar,D,G #which is theta_ddot depending on how you look at it
