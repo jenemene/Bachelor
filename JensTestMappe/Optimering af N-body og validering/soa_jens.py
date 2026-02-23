@@ -346,8 +346,11 @@ def omega(theta_vec,link,tau_bar,D,n):
     for k in range (n-1,0,-1):
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
-        psi = link.RBT @ tau_bar[k]
-        omega[k] = cRp @ omega[k+1] @ pRc @ psi
+        #OLD: psi = link.RBT @ tau_bar[k]
+        #OLD: omega[k] = cRp @ omega[k+1] @ pRc @ psi
+
+        # New?:
+        omega[k] = cRp @ omega[k+1] @ link.RBT @ pRc @tau_bar[k]
 
     omega_nn = gamma[n]
     omega_n1 = omega[1]
