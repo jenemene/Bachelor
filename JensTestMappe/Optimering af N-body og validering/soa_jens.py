@@ -169,9 +169,10 @@ class SimpleLink:
             print("right now i have only specified for spherical joints")
 
 def normalize_quaternions(q):
-    #takes a vector of stacked quartenions and normalized them. fully vectorized.
-    q = np.asarray(q)
-    q_reshaped = q.reshape(-1, 4)
+    # ADD copy=True to protect your RK4 state!
+    q_safe = np.array(q, copy=True) 
+    
+    q_reshaped = q_safe.reshape(-1, 4)
     norms = np.linalg.norm(q_reshaped, axis=1, keepdims=True)
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
@@ -232,7 +233,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         
         #gravity and storage of gravity
         g = [None]*(n+2)
-        g[n+1] = np.array([0,0,0,0,0,9.81]) #in inertial frame 
+        g[n+1] = np.array([0,0,0,0,0,0*9.81]) #in inertial frame 
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
@@ -369,20 +370,18 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
     for k in range (1,n+1):
         pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
         cRp = pRc.T 
-        psi = link.RBT @ tau_bar[k-1]
-        xi_delta[k] = pRc@psi@xi_delta[k-1] - f_c[k]
-        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k])
+        
+        xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] - f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her
+        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k]) #skulle være ok den her linje
 
     for k in range(n,0,-1):
         pRc = spatialrotfromquat(theta[k]) 
         cRp = pRc.T      
-        psi = link.RBT @ tau_bar[k]
-        kappa = link.RBT @ G[k]
 
-        lambda_list[k] = psi.T @ cRp @lambda_list[k+1] + link.H.T@nu[k]
+        lambda_list[k] = tau_bar[k].T @ cRp @ link.RBT.T @ lambda_list[k+1]+ link.H.T@nu[k]
 
 
-        beta_dot_delta[k] = nu[k] - kappa.T@cRp@lambda_list[k+1]
+        beta_dot_delta[k] = nu[k] - G[k].T@cRp@link.RBT.T@lambda_list[k+1]
 
     return beta_dot_delta
 
@@ -521,9 +520,7 @@ def RK4_int(odefun, initial_cond, time_vec, n,link):
         k4 = odefun(t + dt,y + dt * k3,n,link)
 
         Y[:, i+1] = y + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
-
-    #filling in last timestep 
-
+ 
     return Y
 
 def RK4_int_with_V(odefun, initial_cond, time_vec, n,link,RBT):

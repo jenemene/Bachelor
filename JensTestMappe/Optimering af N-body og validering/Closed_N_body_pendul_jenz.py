@@ -16,7 +16,7 @@ def N_body_pendulum_closed(n):
         beta = state[4*n:]
 
         #normalizing quartenions
-        theta = SOA.normalize_quaternions(theta)
+        theta = SOA.normalize_quaternions(theta) 
         
         #calculating theta_dot based on the derrivmap function
         theta_dot = np.zeros(len(theta))
@@ -38,7 +38,7 @@ def N_body_pendulum_closed(n):
         IRn = SOA.spatialrotfromquat(theta[4*(n-1):4*(n-1)+4])
         #A_nd = np.concatenate([IRn @ A_f[n],IR1 @ link.RBT.T @ A_f[1]]) # Hvis denne bruges, så tjek her om den er i rigtig rækkefølge ift. Q og udledning.
 
-        #Setting up Q. We are restricitig that the linear velocity has to be 0
+        #Setting up Q
         d = np.block([np.zeros((3,3)), np.eye(3)])
         Q = np.block([d])
 
@@ -63,14 +63,14 @@ def N_body_pendulum_closed(n):
 
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 0, 0) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 50, 5) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
 
 
         #calculating f_c
-        f_c_closed_loop_const = - Q.T@λ
+        f_c_closed_loop_const =  - Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
         f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const # SKAL VÆRE SÅDAN HER!!!
@@ -86,23 +86,25 @@ def N_body_pendulum_closed(n):
 
 
 
-        ##-DEBUGGING ---------------------------------- 
-        if t < 1e-10:
-            print("=== t=0 diagnostics ===")
-            print(f"Φ:      {Φ}")
-            print(f"|Φ|:    {np.linalg.norm(Φ):.10f}")
-            print(f"Φ_dot:  {Φ_dot}")
-            print(f"|Φ_dot|:{np.linalg.norm(Φ_dot):.10f}")
-            print(f"Φ_ddot: {Φ_ddot}")
-            print(f"|Φ_ddot|:{np.linalg.norm(Φ_ddot):.10f}")
-            print(f"λ:      {λ}")
-            print(f"f_c[1]: {f_c[1]}")
-            print(f"constraint force in clobal coords:{f_c_closed_loop_const}")
-            print(f"beta_dot_f:     {beta_dot_f}")
-            print(f"beta_dot_delta: {beta_dot_delta}")
+        # ##-DEBUGGING ---------------------------------- 
+        # if t < 1e-10:
+        #     print("=== t=0 diagnostics ===")
+        #     print(f"Φ:      {Φ}")
+        #     print(f"|Φ|:    {np.linalg.norm(Φ):.10f}")
+        #     print(f"Φ_dot:  {Φ_dot}")
+        #     print(f"|Φ_dot|:{np.linalg.norm(Φ_dot):.10f}")
+        #     print(f"Φ_ddot: {Φ_ddot}")
+        #     print(f"|Φ_ddot|:{np.linalg.norm(Φ_ddot):.10f}")
+        #     print(f"λ:      {λ}")
+        #     print(f"f_c[1]: {f_c[1]}")
+        #     print(f"constraint force in clobal coords:{f_c_closed_loop_const}")
+        #     print(f"beta_dot_f:     {beta_dot_f}")
+        #     print(f"beta_dot_delta: {beta_dot_delta}")
+        #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
             
-        
         return state_dot
+        
+
     
     #setting up link
     m = 20 #mass in kg
@@ -113,20 +115,23 @@ def N_body_pendulum_closed(n):
     #initial config.
     state0 = N4_initial_config(n)
     
-    tspan = np.arange(0, 10, 0.01)
-    result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
+    tspan = np.arange(0, 40, 0.001)
+    #result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
 
-    return result,tspan # Extract time and state vectors
+    # Extract time and state vectors
     
-    #--- old solver --
-    # result = solve_ivp(
-    #     ODEfun,
-    #     t_span=(0, tspan[-1]), 
-    #     y0=state0, 
-    #     method='Radau',
-    #     t_eval=tspan,
-    #     args=(n, link),
-    #     )
+    result = solve_ivp(
+        ODEfun,
+        t_span=(0, tspan[-1]), 
+        y0=state0, 
+        method='Radau',
+        t_eval=tspan,
+        args=(n, link),
+        rtol=1e-6,
+        atol=1e-9
+        )
+    
+    return result
     
 
 #ONLY for 4 links right now due to initial config.
@@ -137,10 +142,10 @@ def N4_initial_config(n):
     q_all = np.tile(qn, n)
     
     # Create the zero vectors for the other initial velocities states (n, 3)
-    ωn = np.array([0,np.pi/10,0])
+    ωn = np.array([0,np.pi/5,0])
     ω1 = np.zeros(3)
     ω1_tiled = np.tile(ω1, n-1)
-    ω_all = np.concatenate([ω1_tiled, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
+    ω_all = np.concatenate([ω1_tiled, ωn]) # <------------------- Jeg har lige sat den til 0 :)
 
     # Concatenate into one long state vector
     state0 = np.concatenate([q_all, ω_all])
@@ -158,7 +163,7 @@ def N2_initial_config(n):
     # Create the zero vectors for the other initial velocities states (n, 3)
     ωn = np.array([0,np.pi,0])
     ω1 = np.zeros(3)
-    ω_all = np.concatenate([ω1, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
+    ω_all = np.concatenate([ω1, ωn]) # <------------------- Jeg har lige sat den til 0 :)
     # Concatenate into one long state vector
     state0 = np.concatenate([q_all, ω_all])
 
@@ -172,6 +177,24 @@ result = N_body_pendulum_closed(n_bodies)
 
 end = time.perf_counter()
 
+
+# Extract the state matrix (Shape: [states, time_steps])
+y_out = result.y
+    
+# Clean up any microscopic quaternion drift in the final output
+for i in range(len(result.t)):
+    # Ensure we are using your safe, non-mutating normalize_quaternions function
+    y_out[:4*n_bodies, i] = SOA.normalize_quaternions(y_out[:4*n_bodies, i])
+
+
+#til animation
+step = 30 
+
+t_anim = result.t[::step]
+y_anim = y_out[:, ::step]
+
+SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]))
+
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
 print(f"Success: {result.success}")
@@ -179,4 +202,3 @@ print(f"Solver status: {result.message}")
 print(f"Number of function evaluations: {result.nfev}")
 print("========================================================================================")
 
-SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]))
