@@ -222,7 +222,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0.05 # Damping coefficient
+            b = 0*0.05 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -246,7 +246,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         g[n+1] = np.array([0,0,0,0,0,0*9.81]) #in inertial frame 
 
         g_f = [None]*(n+2)
-        g_f[n+1] = np.array([0,0,0,0,0,9.81])
+        g_f[n+1] = np.array([0,0,0,0,0,0*9.81])
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))

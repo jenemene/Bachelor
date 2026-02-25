@@ -63,7 +63,7 @@ def N_body_pendulum_closed(n):
 
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 20) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 50, 5) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -102,7 +102,6 @@ def N_body_pendulum_closed(n):
         #     print(f"beta_dot_delta: {beta_dot_delta}")
         #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
             
-        print(t)
         return state_dot
         
 
@@ -114,9 +113,9 @@ def N_body_pendulum_closed(n):
     link.set_hingemap("spherical")
 
     #initial config.
-    state0 = N4_starup_initial_config(n)
+    state0 = N4_initial_config(n)
     
-    tspan = np.arange(0, 5, 0.001)
+    tspan = np.arange(0, 20, 0.001)
     #result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
 
     # Extract time and state vectors
@@ -128,8 +127,8 @@ def N_body_pendulum_closed(n):
         method='Radau',
         t_eval=tspan,
         args=(n, link),
-        rtol=1e-9,
-        atol=1e-12
+        rtol=1e-6,
+        atol=1e-9
         )
     
     return result
@@ -143,7 +142,7 @@ def N4_initial_config(n):
     q_all = np.tile(qn, n)
     
     # Create the zero vectors for the other initial velocities states (n, 3)
-    ωn = np.array([0,0*np.pi/5,0])
+    ωn = np.array([0,np.pi/5,0])
     ω1 = np.zeros(3)
     ω1_tiled = np.tile(ω1, n-1)
     ω_all = np.concatenate([ω1_tiled, ωn]) # <------------------- Jeg har lige sat den til 0 :)
@@ -228,7 +227,7 @@ step = 30
 t_anim = result.t[::step]
 y_anim = y_out[:, ::step]
 
-SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]))
+SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]),save_video=True)
 
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
