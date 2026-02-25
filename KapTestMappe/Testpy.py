@@ -5,6 +5,7 @@ import soa as SOA
 from scipy.integrate import solve_ivp
 import plotting as SOAplt
 import time
+import importlib
 
 def N_body_pendulum(n):
     #setting up link
@@ -13,15 +14,14 @@ def N_body_pendulum(n):
     link = SOA.SimpleLink(m, l_hinge)
     link.set_hingemap("spherical")
 
-    #RBT is constant
-    RBT = SOA.RBT(l_hinge)
-
-
     #initial config
     state0 = initial_config(n)
 
-    def odefun(t, state, n, link, RBT):
+    def odefun(t, state, n, link):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
+
+        #RBT is constant
+        RBT = SOA.RBT(l_hinge)
 
         #unpacking state
         theta = state[:4*n]
@@ -40,19 +40,21 @@ def N_body_pendulum(n):
         #Calculationg of generalized accelerations (beta_dot) - this requires ATBI. 
         tau_vec = np.zeros_like(beta) #no external torques
 
-        A, V, beta_dot_list = ATBIalg(state, tau_vec, n, link, RBT)
+        A, V, beta_dot_list = ATBIalg(state, tau_vec, n, link)
 
 
         beta_dot = np.concatenate([b.flatten() for b in beta_dot_list[1:n+1]])
 
         state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
 
-        return state_dot
+        return state_dot, V
 
-    def ATBIalg(state, tau_vec, n, link, RBT):
+    def ATBIalg(state, tau_vec, n, link):
+
+        #RBT is constant
+        RBT = SOA.RBT(l_hinge)
 
         #unpacking state
-
         theta_vec = state[:4*n]
         beta_vec  = state[4*n:]
 
@@ -98,6 +100,8 @@ def N_body_pendulum(n):
         #gravity and storage of gravity
         g = [None]*(n+2)
         g[n+1] = np.array([0,0,0,0,0,9.81])
+        g_f = [None]*(n+2)
+        g_f[n+1] = np.array([0,0,0,0,0,0*-9.81]) #to implement as force
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
@@ -115,6 +119,7 @@ def N_body_pendulum(n):
 
             #rotating gravity such that we have that in frame aswell
             g[k] = cRp@g[k+1]
+            g_f[k] = cRp@g_f[k+1]
 
             #hinge contribtuion
             delta_V = link.H.T @ beta[k]
@@ -135,12 +140,15 @@ def N_body_pendulum(n):
             pRc = SOA.spatialrotfromquat(theta[k-1])
             cRp = pRc.T 
 
+            #gravity force
+            f_g = link.M@g_f[k]
+
             P = RBT @ pRc @ P_plus[k-1] @ cRp@RBT.T + link.M
             D = link.H @ P @ link.H.T
             G[k] = np.linalg.solve(D, link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
             tau_bar[k] = np.eye(6) - G[k] @ link.H
             P_plus[k] = tau_bar[k] @ P
-            xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
+            xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] - SOA.RBT(link.l_com) @ f_g
             eps = tau[k] - link.H@xi
             nu[k] = np.linalg.solve(D, eps) #= np.linalg.inv(D)@eps
             xi_plus[k] = xi + G[k]@eps
@@ -151,32 +159,35 @@ def N_body_pendulum(n):
             pRc = SOA.spatialrotfromquat(theta[k])
             cRp = pRc.T 
 
-            A_plus = cRp@ RBT.T @A[k+1]
+            A_plus = cRp@ RBT.T @A [k+1]
             nu_bar = nu[k] - G[k].T @ g[k]  
             beta_dot[k] = nu_bar - G[k].T @ A_plus
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
-        return A,V,beta_dot
+        return A, V, beta_dot
 
     # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 30,0.03)
-    result = solve_ivp(
-        odefun, 
-        t_span=(0, tspan[-1]), 
-        y0=state0, 
-        method='DOP853',
-        t_eval = tspan,
-        args=(n,link,RBT)
-        )
-            # Extract time and state vectors
-    return result
+    # tspan = np.arange(0, 30,0.03)
+    # result = solve_ivp(
+    #     odefun, 
+    #     t_span=(0, tspan[-1]), 
+    #     y0=state0, 
+    #     method='DOP853',
+    #     t_eval = tspan,
+    #     args=(n,link,RBT)
+    #     )
+    #         # Extract time and state vectors
+    # return result
 
+    tspan = np.arange(0, 10, 0.01)
+    result, V = SOA.RK4_int_with_V(odefun,state0,tspan,n,link)
 
+    return result,tspan, V
 
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(0*np.pi/6, "y")
+    qn = SOA.quatfromrev(1*np.pi/2, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -188,65 +199,84 @@ def initial_config(n):
 
     return state0
 
-def custom_initial_config(n):
-    # Calculate initial config for n bodies
-    # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(0, "y")
-    q_rest = SOA.quatfromrev(0, "y")
-    q_rest_tiled = np.tile(q_rest, n-1)
-    
-    # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
-    
-    # Concatenate into one long state vector
-    state0 = np.concatenate([q_rest_tiled, qn, zeros])
-
-    return state0
-
-def custom_initial_config2(n):
-    # Calculate initial config for n bodies
-    # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(-np.pi/2, "y")
-    q_tiled = np.tile(qn, n)
-    
-    # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
-    
-    # Concatenate into one long state vector
-    state0 = np.concatenate([q_tiled, zeros])
-
-    return state0
-
-def rand_initial_config(n):
-    # Assumes that the system consists of spherical joints only
-    # Calculate random initial config for n bodies
-    q0 = np.zeros(4*n)
-    for i in range(n):
-        idxq = 4*i
-        q_random = np.random.randn(4)
-        q_random = q_random / np.linalg.norm(q_random) # Normalize to ensure it's a valid quaternion
-        q0[idxq:idxq+4] = q_random
-    
-    # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
-    
-    # Concatenate into one long state vector
-    state0 = np.concatenate([q0, zeros])
-
-    return state0
-
-n_bodies = 2
-
-start = time.perf_counter()
-
-result = N_body_pendulum(n_bodies)
-
-end = time.perf_counter()
-
-print(f"Integration time: {end - start:.6f} seconds")
-
-#SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
 
 
-SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]),save_video=False)
 
+
+
+#setting up link
+n = 1
+m = 20
+l_hinge = np.array([0,0,0.2])
+link = SOA.SimpleLink(m, l_hinge)
+link.set_hingemap("spherical")
+
+result, tspan, V_values = N_body_pendulum(n)
+print(result.shape)
+
+
+
+
+SOAplt.animate_n_bodies(tspan,result, np.array([0,0,0.2]),save_video=False)
+
+
+
+
+
+timesteps = len(tspan)
+KE = np.zeros(timesteps)
+PE = np.zeros(timesteps)
+TE = np.zeros(timesteps)
+
+start = 0.1
+step = 0.2
+g = 9.81
+
+z0 = np.arange(n) * step + start
+z0 = np.insert(z0, 0, 0)
+
+for i in range(timesteps):
+    KE_t = 0.0
+    PE_t = 0.0
+    com_pos = SOA.compute_com_pos_in_inertial_frame(result[:,i], link.l_hinge, n)
+
+    for k in range(1,n+1):
+        # RBT to move spatial values to COM
+        RBT_OC = SOA.RBT(link.l_hinge*0.5)
+        RBT_CO = SOA.RBT(-link.l_hinge*0.5)
+
+        # Kinetic energy
+        Vk = V_values[i][k]
+        #KE_link = (RBT_OC.T@Vk) @ (RBT_CO@link.M@RBT_CO.T) @ (RBT_OC.T@Vk)
+        #KE_link = (RBT_OC.T@Vk) @ link.M_c @ (RBT_OC.T@Vk)
+        KE_link = Vk @ link.M @ Vk
+        KE_t += 0.5*KE_link
+        
+        # Potential energy
+        zk = com_pos[k][-1] # z-pos of current body k
+        zk_pot = zk + z0[k] # potential height of current body
+        # zk can be negative, e.g. if the pendulum is hanging down (0 potntial energy) then zk=-0.1 (for the first body). Therefore adding z0 in zk_pot.
+        # Also if pendulum is upwards (zk=0.1) then potential height is 0.2 bananas xD.
+        PE_link = m*g*zk_pot
+        PE_t += PE_link
+
+    KE[i] = KE_t
+    PE[i] = PE_t
+    TE_t = KE_t + PE_t
+    TE[i] = TE_t
+
+plt.figure(figsize=(10, 6))
+
+# Plot each component
+plt.plot(tspan, KE, label='Kinetic Energy (KE)')
+plt.plot(tspan, PE, label='Potential Energy (PE)')
+plt.plot(tspan, TE, label='Total Energy (TE)', linestyle='--', color='black')
+
+# Formatting
+plt.title("Energy of the System")
+plt.xlabel("Time [s]")
+plt.ylabel("Energy [J]")
+plt.legend()
+plt.grid(True, alpha=0.5)
+
+plt.show()

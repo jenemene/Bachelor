@@ -466,6 +466,34 @@ def compute_pos_in_inertial_frame(theta_vec, l_vec, n):
 
     return positions
 
+def compute_com_pos_in_inertial_frame(theta_vec, l_vec, n):
+    
+    theta = [None]*(n+1)
+
+    #unpacking interior 
+    for i in range(1, n+1):
+        idxq = 4*(i-1)
+        theta[i] = theta_vec[idxq:idxq+4]
+
+    positions = [None]*(n+1)
+    com_positions = [None]*(n+1)
+
+    R_cumulative = rotfromquat(theta[n]) #initial rotation from body n to inertial frame
+
+    #BC for position of base body
+    positions[n] = np.zeros(3)
+    com_positions[n] = R_cumulative @ l_vec*0.5
+
+    for i in range(n-1,0,-1):        
+        pRc = rotfromquat(theta[i])
+
+        positions[i] = positions[i+1] + R_cumulative @ l_vec
+        com_positions[i] = positions[i+1] + R_cumulative @ l_vec*0.5
+        
+        R_cumulative = R_cumulative @ pRc
+
+    return com_positions
+
 def compute_pos_in_body_frame(theta_vec, l_vec, n):
     # Args:
     # theta_vec: Flattened state vector of quaternions
@@ -570,4 +598,3 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n, link):
     _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link)
 
     return Y, V_storage
-    

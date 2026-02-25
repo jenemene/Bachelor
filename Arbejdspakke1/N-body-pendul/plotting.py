@@ -87,12 +87,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+import matplotlib.animation as animation
+from matplotlib.animation import FFMpegWriter # Add this import
 
-def animate_n_bodies(time, states, l_vec): #skal kigges på igen, noget værre pislort.
-
+def animate_n_bodies(time, states, l_vec, save_video=True): # Added toggle
     n_states, N = states.shape
-
-    # spherical joints assumption
     n = int(n_states / 7) + 1
     n_joints = n - 1
     quat_block_size = 4 * n_joints
@@ -111,65 +110,43 @@ def animate_n_bodies(time, states, l_vec): #skal kigges på igen, noget værre p
 
     line, = ax.plot([], [], [], 'o-', lw=2)
 
-    # =============================
-    # Forward Kinematics
-    # =============================
-
     def compute_positions(state_k):
-
+        # ... (Your existing FK logic remains the same) ...
         quat_block = state_k[:quat_block_size]
-
-        quats = [
-            quat_block[4*i:4*(i+1)]
-            for i in range(n_joints)
-        ]
-
+        quats = [quat_block[4*i:4*(i+1)] for i in range(n_joints)]
         R_cumulative = []
         R = np.eye(3)
-
         for q in reversed(quats):
             R = R @ SOA.rotfromquat(q)
             R_cumulative.insert(0, R.copy())
-
         positions = [np.zeros(3)]
-
         for i in range(n_joints):
-            positions.append(
-                positions[-1] + R_cumulative[i] @ l_vec
-            )
-
+            positions.append(positions[-1] + R_cumulative[i] @ l_vec)
         return np.array(positions)
 
-    # =============================
-    # Animation Update
-    # =============================
-
     def update(frame):
-
         state_k = states[:, frame]
         positions = compute_positions(state_k)
-
         line.set_data(positions[:, 0], positions[:, 1])
         line.set_3d_properties(positions[:, 2])
-
         ax.set_title(f"t = {time[frame]:.3f} s")
-
         return line,
 
-    # Frame timing based on actual simulation time
     dt = np.mean(np.diff(time))
-    interval = dt * 1000  # milliseconds
+    interval = dt * 1000 
 
     ani = animation.FuncAnimation(
-        fig,
-        update,
-        frames=N,
-        interval=interval,
-        blit=False
+        fig, update, frames=N, interval=interval, blit=False
     )
 
+    # --- NEW SAVE LOGIC ---
+    if save_video:
+        print("Rendering video... please wait.")
+        # fps=30 is standard; bitrate helps with quality
+        writer = FFMpegWriter(fps=30, metadata=dict(artist='Jenz'), bitrate=2000)
+        ani.save("bachelor_animation.mp4", writer=writer)
+        print("Video saved as bachelor_animation.mp4")
+
+    ax.view_init(elev=0, azim=-90, roll=0)
     plt.show()
-
     return ani
-
-

@@ -227,7 +227,7 @@ step = 30
 t_anim = result.t[::step]
 y_anim = y_out[:, ::step]
 
-SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]),save_video=True)
+SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]),save_video=False)
 
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
