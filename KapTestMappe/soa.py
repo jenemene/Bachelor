@@ -488,9 +488,10 @@ def compute_com_pos_in_inertial_frame(theta_vec, l_vec, n):
         pRc = rotfromquat(theta[i])
 
         positions[i] = positions[i+1] + R_cumulative @ l_vec
-        com_positions[i] = positions[i+1] + R_cumulative @ l_vec*0.5
         
         R_cumulative = R_cumulative @ pRc
+
+        com_positions[i] = positions[i] + R_cumulative @ l_vec*0.5
 
     return com_positions
 

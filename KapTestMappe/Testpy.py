@@ -205,14 +205,14 @@ def initial_config(n):
 
 
 #setting up link
-n = 1
+n = 3
 m = 20
 l_hinge = np.array([0,0,0.2])
 link = SOA.SimpleLink(m, l_hinge)
 link.set_hingemap("spherical")
 
 result, tspan, V_values = N_body_pendulum(n)
-print(result.shape)
+
 
 
 
@@ -233,6 +233,7 @@ step = 0.2
 g = 9.81
 
 z0 = np.arange(n) * step + start
+z0 = np.flip(z0) #Make it compatible with our convention -> body n connected to inertial.
 z0 = np.insert(z0, 0, 0)
 
 for i in range(timesteps):
@@ -255,7 +256,11 @@ for i in range(timesteps):
         # Potential energy
         zk = com_pos[k][-1] # z-pos of current body k
         zk_pot = zk + z0[k] # potential height of current body
-        # zk can be negative, e.g. if the pendulum is hanging down (0 potntial energy) then zk=-0.1 (for the first body). Therefore adding z0 in zk_pot.
+        if i == 0:
+            print(com_pos)
+            print(zk)
+            print(zk_pot)
+        # zk can be negative, e.g. if the pendulum is hanging down (0 potential energy) then zk=-0.1 (for the first body). Therefore adding z0 in zk_pot.
         # Also if pendulum is upwards (zk=0.1) then potential height is 0.2 bananas xD.
         PE_link = m*g*zk_pot
         PE_t += PE_link
