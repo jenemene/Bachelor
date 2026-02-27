@@ -63,7 +63,7 @@ def N_body_pendulum_closed(n):
 
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 25) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 50, 5) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -145,7 +145,7 @@ def N4_initial_config(n):
     ωn = np.array([0,np.pi/5,0])
     ω1 = np.zeros(3)
     ω1_tiled = np.tile(ω1, n-1)
-    ω_all = np.concatenate([ω1_tiled, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
+    ω_all = np.concatenate([ω1_tiled, ωn]) # <------------------- Jeg har lige sat den til 0 :)
 
     # Concatenate into one long state vector
     state0 = np.concatenate([q_all, ω_all])

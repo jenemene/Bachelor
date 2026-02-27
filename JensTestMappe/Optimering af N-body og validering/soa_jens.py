@@ -222,7 +222,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0*0.05 # Damping coefficient
+            b = 0.05 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -246,7 +246,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         g[n+1] = np.array([0,0,0,0,0,0*9.81]) #in inertial frame 
 
         g_f = [None]*(n+2)
-        g_f[n+1] = np.array([0,0,0,0,0,0*9.81])
+        g_f[n+1] = np.array([0,0,0,0,0,9.81])
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
@@ -330,8 +330,6 @@ def omega(theta_vec,link,tau_bar,D,n):
     #calculating diagonal entries of omega
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
-        #psi = link.RBT @ tau_bar[k]
-        #gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H)
 
         ##### ---------- ÆNDRET LINJER MED NYE ROTATIONER, GAMLE LINJE ER OVER DENNE --------------------------
         gamma[k] = tau_bar[k].T @ cRp @ link.RBT.T @ gamma[k+1] @ link.RBT @ pRc @ tau_bar[k] + link.H.T @ np.linalg.solve(D[k],link.H)
