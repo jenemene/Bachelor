@@ -211,7 +211,7 @@ print(f"Integration time: {end - start:.6f} seconds")
 
 SOAplt.N_body_pendulum_gen_plot(tspan,result,n_bodies)
 
-SOAplt.animate_n_bodies(tspan,result, np.array([0,0,0.5]))
+SOAplt.animate_n_bodies(tspan,result, np.array([0,0,0.5]),False)
 
 #SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.5]))
 
