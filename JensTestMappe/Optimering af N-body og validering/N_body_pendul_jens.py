@@ -94,18 +94,13 @@ def N_body_pendulum(n):
         tau_bar = [None]*(n+2)
         agothic = [None]*(n+2)
         bgothic = [None]*(n+2)
-        
-        #gravity and storage of gravity
-        g = [None]*(n+2)
-        g[n+1] = np.array([0,0,0,0,0,0*9.81])
-        g_f = [None]*(n+2)
-        g_f[n+1] = np.array([0,0,0,0,0,-9.81]) #to implement as force
+
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
         tau_bar[0] = P_plus[0]
-        A[n+1] = np.array([0, 0, 0, 0, 0, 0])
+        A[n+1] = np.array([0, 0, 0, 0, 0, 9.81])
         V[n+1] = np.zeros((6,))
 
         #kinematics scatter
@@ -114,10 +109,6 @@ def N_body_pendulum(n):
             #rotation matrices
             pRc = SOA.spatialrotfromquat(theta[k]) #vurder det her
             cRp = pRc.T #from parent to child -> this is the direction we are going right now
-
-            #rotating gravity such that we have that in frame aswell
-            g[k] = cRp@g[k+1]
-            g_f[k] = cRp@g_f[k+1]
 
             #hinge contribtuion
             delta_V = link.H.T @ beta[k]
@@ -138,17 +129,15 @@ def N_body_pendulum(n):
             pRc = SOA.spatialrotfromquat(theta[k-1])
             cRp = pRc.T 
 
-            #gravity force
-            f_g = link.M@g_f[k]
 
             P = RBT @ pRc @ P_plus[k-1] @ cRp@RBT.T + link.M
             D = link.H @ P @ link.H.T
-            G[k] = np.linalg.solve(D, link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
+            G[k] = np.linalg.solve(D, link.H @ P).T 
             tau_bar[k] = np.eye(6) - G[k] @ link.H
             P_plus[k] = tau_bar[k] @ P
-            xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] - SOA.RBT(link.l_com)@f_g
+            xi = RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
             eps = tau[k] - link.H@xi
-            nu[k] = np.linalg.solve(D, eps) #= np.linalg.inv(D)@eps
+            nu[k] = np.linalg.solve(D, eps)
             xi_plus[k] = xi + G[k]@eps
 
         #ATBI scatter
@@ -157,9 +146,8 @@ def N_body_pendulum(n):
             pRc = SOA.spatialrotfromquat(theta[k])
             cRp = pRc.T 
 
-            A_plus = cRp@ RBT.T @A[k+1]
-            nu_bar = nu[k] - G[k].T @ g[k]  
-            beta_dot[k] = nu_bar - G[k].T @ A_plus
+            A_plus = cRp@ RBT.T @A[k+1] 
+            beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
         return A,V,beta_dot
@@ -199,7 +187,7 @@ def initial_config(n):
     return state0
 
 
-n_bodies = 3
+n_bodies = 10
 
 start = time.perf_counter()
 
