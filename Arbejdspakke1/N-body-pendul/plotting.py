@@ -146,6 +146,60 @@ def animate_n_bodies(time, states, l_vec, save_video=False): # Added toggle
     plt.show()
     return ani
 
+def plot_initial_state(state0, l_vec):
+    """
+    Plots the initial 3D configuration of the n-body system.
+    """
+    n_states = len(state0)
+    # Reconstructing the number of bodies/joints from the state vector size
+    # Based on: n_states = 7 * (n - 1) 
+    n = int(n_states / 7) + 1
+    n_joints = n - 1
+    quat_block_size = 4 * n_joints
+
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Setting plot limits based on the total reach of the chain
+    plotlim = n * np.linalg.norm(l_vec)
+    ax.set_xlim([-plotlim, plotlim])
+    ax.set_ylim([-plotlim, plotlim])
+    ax.set_zlim([-plotlim, plotlim])
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_title("Initial State Configuration")
+
+    # Forward Kinematics Logic
+    quat_block = state0[:quat_block_size]
+    quats = [quat_block[4*i:4*(i+1)] for i in range(n_joints)]
+    
+    R_cumulative = []
+    R = np.eye(3)
+    
+    # Calculate cumulative rotations
+    for q in reversed(quats):
+        # Assuming SOA.rotfromquat is available in your namespace
+        R = R @ SOA.rotfromquat(q)
+        R_cumulative.insert(0, R.copy())
+
+    # Calculate positions of each joint/link end
+    positions = [np.zeros(3)]
+    for i in range(n_joints):
+        positions.append(positions[-1] + R_cumulative[i] @ l_vec)
+    
+    pos_array = np.array(positions)
+
+    # Plotting the "skeleton"
+    ax.plot(pos_array[:, 0], pos_array[:, 1], pos_array[:, 2], 'o-', lw=3, markersize=8)
+
+    ax.view_init(elev=0, azim=-90, roll=0)
+    plt.grid(True)
+    plt.show()
+
+    return fig, ax
+
 def check_energies(result, V_values, tspan, link, n, config="openclosed"):
     timesteps = len(tspan)
     KE = np.zeros(timesteps)
@@ -163,24 +217,28 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
     elif config == "closed":
         assert n % 2 == 0, "check_energies function only supports closed configuration with even number of bodies"
         ztemp = np.arange(n/2) * step + start
-        z0 = np.flip(ztemp) #Make it compatible with our convention -> body n connected to inertial.
+        z0 = np.concatenate([ztemp, np.flip(ztemp)]) # Mirror the z-positions for the second half of the system
         z0 = np.insert(z0, 0, 0)
-        z0 = np.concatenate([z0, ztemp]) # Mirror the z-positions for the second half of the system
 
     for i in range(timesteps):
         KE_t = 0.0
         PE_t = 0.0
         com_pos = SOA.compute_com_pos_in_inertial_frame(result[:,i], link.l_hinge, n)
 
-        for k in range(1,n+1):
+        for k in range(1,n+1):            
             # Kinetic energy
-            Vk = V_values[i][k]
+            Vk = V_values[i][k] 
             KE_link = Vk @ link.M @ Vk
             KE_t += 0.5*KE_link
             
             # Potential energy
             zk = com_pos[k][-1] # z-pos of current body k
             zk_pot = zk + z0[k] # potential height of current body
+
+            if i == 0:
+                print(f"Body {k}:")
+                print(zk)
+                print(z0[k])
 
             PE_link = link.m*g*zk_pot
             PE_t += PE_link

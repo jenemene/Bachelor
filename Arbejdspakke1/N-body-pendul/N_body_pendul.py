@@ -15,15 +15,14 @@ def N_body_pendulum(n, tspan):
     link = SOA.SimpleLink(m, l_hinge)
     link.set_hingemap("spherical")
 
-    #RBT is constant
-    RBT = SOA.RBT(l_hinge)
-
-
     #initial config
     state0 = initial_config(n)
 
-    def odefun(t, state, n, link, RBT):
+    def odefun(t, state, n, link):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
+
+        #RBT is constant
+        RBT = SOA.RBT(l_hinge)
 
         #unpacking state
         theta = state[:4*n]
@@ -171,14 +170,14 @@ def N_body_pendulum(n, tspan):
     #     )
     #         # Extract time and state vectors
 
-    Y, V_values = SOA.RK4_int_with_V(odefun, state0, tspan, n,link,RBT)
+    Y, V_values = SOA.RK4_int_with_V(odefun, state0, tspan, n, link)
 
-    return Y, V_values, tspan, link
+    return Y, V_values, link
 
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(3*np.pi/4, "y")
+    qn = SOA.quatfromrev(0*np.pi/2, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -190,41 +189,12 @@ def initial_config(n):
 
     return state0
 
-# def custom_initial_config(n):
-#     # Calculate initial config for n bodies
-#     # q0: All aligned and tilted to some side
-#     qn = SOA.quatfromrev(0, "y")
-#     q_rest = SOA.quatfromrev(0, "y")
-#     q_rest_tiled = np.tile(q_rest, n-1)
-    
-#     # Create the zero vectors for the other initial velocities states (n, 3)
-#     zeros = np.zeros(3 * n)
-    
-#     # Concatenate into one long state vector
-#     state0 = np.concatenate([q_rest_tiled, qn, zeros])
-
-#     return state0
-
-# def custom_initial_config2(n):
-#     # Calculate initial config for n bodies
-#     # q0: All aligned and tilted to some side
-#     qn = SOA.quatfromrev(-np.pi/2, "y")
-#     q_tiled = np.tile(qn, n)
-    
-#     # Create the zero vectors for the other initial velocities states (n, 3)
-#     zeros = np.zeros(3 * n)
-    
-#     # Concatenate into one long state vector
-#     state0 = np.concatenate([q_tiled, zeros])
-
-#     return state0
-
-n_bodies = 10
-tspan = np.arange(0, 10, 0.005)
+n_bodies = 4
+tspan = np.arange(0, 5, 0.001)
 
 start = time.perf_counter()
 
-Y, V_values, tspan, link = N_body_pendulum(n_bodies, tspan)
+Y, V_values, link = N_body_pendulum(n_bodies, tspan)
 
 end = time.perf_counter()
 

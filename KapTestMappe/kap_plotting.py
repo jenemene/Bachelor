@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.animation as animation
-import soa as SOA
+import kap_soa as SOA
+from matplotlib.animation import FFMpegWriter # Add this import
 
 def spatial_plot(t, spatialquantity, type="spatialquantity",bodyno="body number"):
     # t: time vector as a np array of shape (N,)
@@ -84,14 +85,7 @@ def N_body_pendulum_gen_plot(t_vals,y_vals,n_bodies):
     plt.tight_layout()
     plt.show()
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-
-import matplotlib.animation as animation
-from matplotlib.animation import FFMpegWriter # Add this import
-
-def animate_n_bodies(time, states, l_vec, save_video=True): # Added toggle
+def animate_n_bodies(time, states, l_vec, save_video=False): # Added toggle
     n_states, N = states.shape
     n = int(n_states / 7) + 1
     n_joints = n - 1
@@ -152,10 +146,7 @@ def animate_n_bodies(time, states, l_vec, save_video=True): # Added toggle
     plt.show()
     return ani
 
-
-
-
-def check_energies(result, V_values, tspan, link, n):
+def check_energies(result, V_values, tspan, link, n, config="openclosed"):
     timesteps = len(tspan)
     KE = np.zeros(timesteps)
     PE = np.zeros(timesteps)
@@ -165,9 +156,16 @@ def check_energies(result, V_values, tspan, link, n):
     step = 0.2
     g = 9.81
 
-    z0 = np.arange(n) * step + start
-    z0 = np.flip(z0) #Make it compatible with our convention -> body n connected to inertial.
-    z0 = np.insert(z0, 0, 0)
+    if config == "open":
+        z0 = np.arange(n) * step + start
+        z0 = np.flip(z0) #Make it compatible with our convention -> body n connected to inertial.
+        z0 = np.insert(z0, 0, 0)
+    elif config == "closed":
+        assert n % 2 == 0, "check_energies function only supports closed configuration with even number of bodies"
+        ztemp = np.arange(n/2) * step + start
+        z0 = np.flip(ztemp) #Make it compatible with our convention -> body n connected to inertial.
+        z0 = np.insert(z0, 0, 0)
+        z0 = np.concatenate([z0, ztemp]) # Mirror the z-positions for the second half of the system
 
     for i in range(timesteps):
         KE_t = 0.0
@@ -189,8 +187,7 @@ def check_energies(result, V_values, tspan, link, n):
 
         KE[i] = KE_t
         PE[i] = PE_t
-        TE_t = KE_t + PE_t
-        TE[i] = TE_t
+        TE[i] = KE_t + PE_t
 
     plt.figure(figsize=(10, 6))
 

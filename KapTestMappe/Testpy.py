@@ -1,9 +1,9 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import soa as SOA
+import kap_soa as SOA
 from scipy.integrate import solve_ivp
-import plotting as SOAplt
+import KapTestMappe.kap_plotting as SOAplt
 import time
 import importlib
 

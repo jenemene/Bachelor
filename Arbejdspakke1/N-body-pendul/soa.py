@@ -222,7 +222,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0.05 # Damping coefficient
+            b = 0.2 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -551,7 +551,6 @@ def RK4_int(odefun, initial_cond, time_vec, n,link):
 
     # initial V - spatial vel
 
-
     for i in range(N - 1):
         t = time_vec[i]
         y = Y[:, i]
@@ -565,7 +564,7 @@ def RK4_int(odefun, initial_cond, time_vec, n,link):
  
     return Y
 
-def RK4_int_with_V(odefun, initial_cond, time_vec, n,link,RBT):
+def RK4_int_with_V(odefun, initial_cond, time_vec, n,link):
     time_vec = np.asarray(time_vec)
     y0 = np.asarray(initial_cond).reshape(-1)
 
@@ -587,16 +586,16 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n,link,RBT):
         t = time_vec[i]
         y = Y[:, i]
 
-        k1,V_val = odefun(t,y,n,link,RBT)
-        k2,_ = odefun(t + dt/2.0,y + dt/2.0 * k1,n,link,RBT)
-        k3,_ = odefun(t + dt/2.0,y + dt/2.0 * k2,n,link,RBT)
-        k4,_ = odefun(t + dt,y + dt * k3,n,link,RBT)
+        k1,V_val = odefun(t,y,n,link)
+        k2,_ = odefun(t + dt/2.0,y + dt/2.0 * k1,n,link)
+        k3,_ = odefun(t + dt/2.0,y + dt/2.0 * k2,n,link)
+        k4,_ = odefun(t + dt,y + dt * k3,n,link)
 
         Y[:, i+1] = y + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
         V_storage[i] = V_val
 
     #filling in last timestep 
-    _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link, RBT)
+    _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link)
 
     return Y, V_storage
     

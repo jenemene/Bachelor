@@ -2,14 +2,13 @@ import matplotlib
 from matplotlib.pylab import norm
 import matplotlib.pyplot as plt 
 import numpy as np
-import soa as SOA
+import kap_soa as SOA
 from scipy.integrate import solve_ivp
-import plotting as SOAplt
+import kap_plotting as SOAplt
 import time
-import initial_configs as iniconf
+import kap_initial_configs as iniconf
 
 def N_body_pendulum_closed(n, tspan, state0):
-    print("Starting simulation...")
     def ODEfun(t,state,n,link):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
 
@@ -30,7 +29,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         #Calculationg of generalized accelerations without any constraints (beta_dot_free) - this requires ATBI. 
         tau_vec = np.zeros_like(beta) #no external torques
 
-        A_f, V_f, beta_dot_f_list, tau_bar, D, G = SOA.ATBI_N_body_pendulum(state, tau_vec, n, link)
+        A_f,V_f, beta_dot_f_list,tau_bar,D,G = SOA.ATBI_N_body_pendulum(state, tau_vec, n, link)
 
         beta_dot_f = np.concatenate([b.flatten() for b in beta_dot_f_list[1:n+1]])
 
@@ -104,10 +103,10 @@ def N_body_pendulum_closed(n, tspan, state0):
         #     print(f"beta_dot_delta: {beta_dot_delta}")
         #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
         
+        print(t)
+        return state_dot
+        
 
-        if t % 1 == 0: # Print every 1 second
-            print(t)
-        return state_dot, V_f
     
     #setting up link
     m = 2 #mass in kg
@@ -115,7 +114,8 @@ def N_body_pendulum_closed(n, tspan, state0):
     link = SOA.SimpleLink(m,l_hinge)
     link.set_hingemap("spherical")
     
-    result, V_f = SOA.RK4_int_with_V(ODEfun, state0, tspan, n, link)
+
+    result = SOA.RK4_int_with_V(ODEfun, state0, tspan, n, link)
     
     # result = solve_ivp(
     #     ODEfun,
@@ -128,44 +128,41 @@ def N_body_pendulum_closed(n, tspan, state0):
     #     atol=1e-9
     #     )
     
-    return result, V_f, link
-
+    return result, V_values, link
+    
 
 
 ### SIMULATION SETTINGS ###
-n_bodies = 2
-tspan = np.arange(0, 0.5, 0.001)
-state0 = iniconf.N2(n_bodies)
+n_bodies = 4
+tspan = np.arange(0, 10, 0.001)
+state0 = iniconf.N4_square(n_bodies)
 
 # Running and timing the simulation
 start = time.perf_counter()
-result, V_f, link = N_body_pendulum_closed(n_bodies, tspan, state0)
+result, V_values, link = N_body_pendulum_closed(n_bodies, tspan, state0)
 end = time.perf_counter()
 
 # Extract the state matrix (Shape: [states, time_steps])
-y_out = result
+y_out = result.y
 
 # Clean up any microscopic quaternion drift in the final output
-for i in range(len(tspan)):
+for i in range(len(result.t)):
     # Ensure we are using your safe, non-mutating normalize_quaternions function
     y_out[:4*n_bodies, i] = SOA.normalize_quaternions(y_out[:4*n_bodies, i])
 
 # For animation
 step = 30 
 
-t_anim = tspan[::step]
+t_anim = result.t[::step]
 y_anim = y_out[:, ::step]
 
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
-#print(f"Success: {result.success}")
-#print(f"Solver status: {result.message}")
-#print(f"Number of function evaluations: {result.nfev}")
+print(f"Success: {result.success}")
+print(f"Solver status: {result.message}")
+print(f"Number of function evaluations: {result.nfev}")
 print("========================================================================================")
 
-l_vec = np.array([0,0,0.2])
-SOAplt.plot_initial_state(state0, l_vec)
-#SOAplt.animate_n_bodies(t_anim, y_anim, l_vec, save_video=False)
+SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]),save_video=False)
 
-#SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
-
+SOAplt.check_energies(result, V_values, tspan, link, n_bodies, "closed")

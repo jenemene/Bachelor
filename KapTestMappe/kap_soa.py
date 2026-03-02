@@ -330,8 +330,6 @@ def omega(theta_vec,link,tau_bar,D,n):
     #calculating diagonal entries of omega
         pRc = spatialrotfromquat(theta[k]) #rotations
         cRp = pRc.T
-        #psi = link.RBT @ tau_bar[k]
-        #gamma[k] = psi.T @ cRp @ gamma[k+1] @ pRc @ psi + link.H.T @ np.linalg.solve(D[k],link.H)
 
         ##### ---------- ÆNDRET LINJER MED NYE ROTATIONER, GAMLE LINJE ER OVER DENNE --------------------------
         gamma[k] = tau_bar[k].T @ cRp @ link.RBT.T @ gamma[k+1] @ link.RBT @ pRc @ tau_bar[k] + link.H.T @ np.linalg.solve(D[k],link.H)
@@ -567,7 +565,7 @@ def RK4_int(odefun, initial_cond, time_vec, n,link):
  
     return Y
 
-def RK4_int_with_V(odefun, initial_cond, time_vec, n, link):
+def RK4_int_with_V(odefun, initial_cond, time_vec, n,link):
     time_vec = np.asarray(time_vec)
     y0 = np.asarray(initial_cond).reshape(-1)
 
@@ -582,6 +580,8 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n, link):
     V_storage = [None]*N
 
     # initial V - spatial vel
+
+
 
     for i in range(N - 1):
         t = time_vec[i]
@@ -599,3 +599,4 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n, link):
     _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link)
 
     return Y, V_storage
+    
