@@ -56,7 +56,7 @@ def N_body_pendulum_closed(n):
         Λ_11 = IR1 @ Λ_11 @ IR1.T
         Λ_nn = IRn @ Λ_nn @ IRn.T
         Λ_n1 = IR1 @ Λ_n1 @ IR1.T 
-        Λ_1n = IR1 @ Λ_1n @ IRn.T 
+        Λ_1n = IR1 @ Λ_1n @ IR1.T 
 
         # Build the 12x12 block matrix
         Λ_block = np.block([
@@ -75,13 +75,13 @@ def N_body_pendulum_closed(n):
         Φ =  l_IOn - (l_IO1 + IR1[:3, :3]@link.l_hinge)
         Φ_dot = IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
         Φ_ddot =  IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
-
+        
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
         f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 20) # Parametrene er vi slet ikke sikker på) AYO HVORFOR FUCK HEDDER DEN F
 
         #solving for lagrange multipliers
-        λ = np.linalg.solve((Q@Λ_block@Q.T),f) # Dimension: 3x1
+        λ = np.linalg.solve((-Q@Λ_block@Q.T),f) # Dimension: 3x1
 
 
         #calculating f_c (skal ændred noget her)
