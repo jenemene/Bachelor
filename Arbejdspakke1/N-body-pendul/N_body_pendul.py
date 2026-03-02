@@ -1,3 +1,5 @@
+from os import link
+
 import matplotlib
 import matplotlib.pyplot as plt 
 import numpy as np
@@ -6,7 +8,7 @@ from scipy.integrate import solve_ivp
 import plotting as SOAplt
 import time
 
-def N_body_pendulum(n):
+def N_body_pendulum(n, tspan):
     #setting up link
     m = 20
     l_hinge = np.array([0,0,0.2])
@@ -47,7 +49,7 @@ def N_body_pendulum(n):
 
         state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
 
-        return state_dot
+        return state_dot, V
 
     def ATBIalg(state, tau_vec, n, link, RBT):
 
@@ -158,25 +160,25 @@ def N_body_pendulum(n):
 
         return A,V,beta_dot
 
-    # Solve the ODE using scipy's solve_ivp
-    tspan = np.arange(0, 30,0.03)
-    result = solve_ivp(
-        odefun, 
-        t_span=(0, tspan[-1]), 
-        y0=state0, 
-        method='DOP853',
-        t_eval = tspan,
-        args=(n,link,RBT)
-        )
-            # Extract time and state vectors
-    return result
+    # Solve the ODE using scipy's solve_ivp    
+    # result = solve_ivp(
+    #     odefun, 
+    #     t_span=(0, tspan[-1]), 
+    #     y0=state0, 
+    #     method='DOP853',
+    #     t_eval = tspan,
+    #     args=(n,link,RBT)
+    #     )
+    #         # Extract time and state vectors
 
+    Y, V_values = SOA.RK4_int_with_V(odefun, state0, tspan, n,link,RBT)
 
+    return Y, V_values, tspan, link
 
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(0*np.pi/6, "y")
+    qn = SOA.quatfromrev(3*np.pi/4, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -188,58 +190,41 @@ def initial_config(n):
 
     return state0
 
-def custom_initial_config(n):
-    # Calculate initial config for n bodies
-    # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(0, "y")
-    q_rest = SOA.quatfromrev(0, "y")
-    q_rest_tiled = np.tile(q_rest, n-1)
+# def custom_initial_config(n):
+#     # Calculate initial config for n bodies
+#     # q0: All aligned and tilted to some side
+#     qn = SOA.quatfromrev(0, "y")
+#     q_rest = SOA.quatfromrev(0, "y")
+#     q_rest_tiled = np.tile(q_rest, n-1)
     
-    # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
+#     # Create the zero vectors for the other initial velocities states (n, 3)
+#     zeros = np.zeros(3 * n)
     
-    # Concatenate into one long state vector
-    state0 = np.concatenate([q_rest_tiled, qn, zeros])
+#     # Concatenate into one long state vector
+#     state0 = np.concatenate([q_rest_tiled, qn, zeros])
 
-    return state0
+#     return state0
 
-def custom_initial_config2(n):
-    # Calculate initial config for n bodies
-    # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(-np.pi/2, "y")
-    q_tiled = np.tile(qn, n)
+# def custom_initial_config2(n):
+#     # Calculate initial config for n bodies
+#     # q0: All aligned and tilted to some side
+#     qn = SOA.quatfromrev(-np.pi/2, "y")
+#     q_tiled = np.tile(qn, n)
     
-    # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
+#     # Create the zero vectors for the other initial velocities states (n, 3)
+#     zeros = np.zeros(3 * n)
     
-    # Concatenate into one long state vector
-    state0 = np.concatenate([q_tiled, zeros])
+#     # Concatenate into one long state vector
+#     state0 = np.concatenate([q_tiled, zeros])
 
-    return state0
+#     return state0
 
-def rand_initial_config(n):
-    # Assumes that the system consists of spherical joints only
-    # Calculate random initial config for n bodies
-    q0 = np.zeros(4*n)
-    for i in range(n):
-        idxq = 4*i
-        q_random = np.random.randn(4)
-        q_random = q_random / np.linalg.norm(q_random) # Normalize to ensure it's a valid quaternion
-        q0[idxq:idxq+4] = q_random
-    
-    # Create the zero vectors for the other initial velocities states (n, 3)
-    zeros = np.zeros(3 * n)
-    
-    # Concatenate into one long state vector
-    state0 = np.concatenate([q0, zeros])
-
-    return state0
-
-n_bodies = 2
+n_bodies = 10
+tspan = np.arange(0, 10, 0.005)
 
 start = time.perf_counter()
 
-result = N_body_pendulum(n_bodies)
+Y, V_values, tspan, link = N_body_pendulum(n_bodies, tspan)
 
 end = time.perf_counter()
 
@@ -247,6 +232,6 @@ print(f"Integration time: {end - start:.6f} seconds")
 
 #SOAplt.N_body_pendulum_gen_plot(result.t,result.y,n_bodies)
 
+SOAplt.animate_n_bodies(tspan,Y, np.array([0,0,0.2]),save_video=False)
 
-SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.2]),save_video=False)
-
+SOAplt.check_energies(Y, V_values, tspan, link, n_bodies,"open")

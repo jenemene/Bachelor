@@ -175,14 +175,8 @@ def check_energies(result, V_values, tspan, link, n):
         com_pos = SOA.compute_com_pos_in_inertial_frame(result[:,i], link.l_hinge, n)
 
         for k in range(1,n+1):
-            # RBT to move spatial values to COM
-            RBT_OC = SOA.RBT(link.l_hinge*0.5)
-            RBT_CO = SOA.RBT(-link.l_hinge*0.5)
-
             # Kinetic energy
             Vk = V_values[i][k]
-            #KE_link = (RBT_OC.T@Vk) @ (RBT_CO@link.M@RBT_CO.T) @ (RBT_OC.T@Vk)
-            #KE_link = (RBT_OC.T@Vk) @ link.M_c @ (RBT_OC.T@Vk)
             KE_link = Vk @ link.M @ Vk
             KE_t += 0.5*KE_link
             

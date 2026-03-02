@@ -146,7 +146,7 @@ def animate_n_bodies(time, states, l_vec, save_video=False): # Added toggle
     plt.show()
     return ani
 
-def check_energies(result, V_values, tspan, link, n):
+def check_energies(result, V_values, tspan, link, n, config="openclosed"):
     timesteps = len(tspan)
     KE = np.zeros(timesteps)
     PE = np.zeros(timesteps)
@@ -156,9 +156,16 @@ def check_energies(result, V_values, tspan, link, n):
     step = 0.2
     g = 9.81
 
-    z0 = np.arange(n) * step + start
-    z0 = np.flip(z0) #Make it compatible with our convention -> body n connected to inertial.
-    z0 = np.insert(z0, 0, 0)
+    if config == "open":
+        z0 = np.arange(n) * step + start
+        z0 = np.flip(z0) #Make it compatible with our convention -> body n connected to inertial.
+        z0 = np.insert(z0, 0, 0)
+    elif config == "closed":
+        assert n % 2 == 0, "check_energies function only supports closed configuration with even number of bodies"
+        ztemp = np.arange(n/2) * step + start
+        z0 = np.flip(ztemp) #Make it compatible with our convention -> body n connected to inertial.
+        z0 = np.insert(z0, 0, 0)
+        z0 = np.concatenate([z0, ztemp]) # Mirror the z-positions for the second half of the system
 
     for i in range(timesteps):
         KE_t = 0.0
@@ -166,14 +173,8 @@ def check_energies(result, V_values, tspan, link, n):
         com_pos = SOA.compute_com_pos_in_inertial_frame(result[:,i], link.l_hinge, n)
 
         for k in range(1,n+1):
-            # RBT to move spatial values to COM
-            RBT_OC = SOA.RBT(link.l_hinge*0.5)
-            RBT_CO = SOA.RBT(-link.l_hinge*0.5)
-
             # Kinetic energy
             Vk = V_values[i][k]
-            #KE_link = (RBT_OC.T@Vk) @ (RBT_CO@link.M@RBT_CO.T) @ (RBT_OC.T@Vk)
-            #KE_link = (RBT_OC.T@Vk) @ link.M_c @ (RBT_OC.T@Vk)
             KE_link = Vk @ link.M @ Vk
             KE_t += 0.5*KE_link
             
@@ -186,8 +187,7 @@ def check_energies(result, V_values, tspan, link, n):
 
         KE[i] = KE_t
         PE[i] = PE_t
-        TE_t = KE_t + PE_t
-        TE[i] = TE_t
+        TE[i] = KE_t + PE_t
 
     plt.figure(figsize=(10, 6))
 
