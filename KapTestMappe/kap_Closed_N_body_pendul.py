@@ -9,6 +9,8 @@ import time
 import kap_initial_configs as iniconf
 
 def N_body_pendulum_closed(n, tspan, state0):
+    print("Starting simulation...")
+
     def ODEfun(t,state,n,link):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
 
@@ -29,7 +31,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         #Calculationg of generalized accelerations without any constraints (beta_dot_free) - this requires ATBI. 
         tau_vec = np.zeros_like(beta) #no external torques
 
-        A_f,V_f, beta_dot_f_list,tau_bar,D,G = SOA.ATBI_N_body_pendulum(state, tau_vec, n, link)
+        A_f, V_f, beta_dot_f_list, tau_bar, D, G = SOA.ATBI_N_body_pendulum(state, tau_vec, n, link)
 
         beta_dot_f = np.concatenate([b.flatten() for b in beta_dot_f_list[1:n+1]])
 
@@ -51,8 +53,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         Λ_11 =link.RBT.T @ omega_11 @ link.RBT
 
         Λ_block =  IR1 @ Λ_11 @IR1.T
-
-
+        
         positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
 
         l_IO1 = positions[1]
@@ -103,10 +104,19 @@ def N_body_pendulum_closed(n, tspan, state0):
         #     print(f"beta_dot_delta: {beta_dot_delta}")
         #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
         
-        print(t)
-        return state_dot
-        
 
+        # 1. Initialize 't_old' only on the very first call
+        if not hasattr(ODEfun, "t_old"):
+            ODEfun.t_old = -1 
+
+        t_now = int(t)
+
+        # 2. Check if the integer part of time has increased
+        if t_now > ODEfun.t_old:
+            print(t_now)
+            ODEfun.t_old = t_now # Update memory to current second
+
+        return state_dot #, V_f
     
     #setting up link
     m = 2 #mass in kg
@@ -114,55 +124,62 @@ def N_body_pendulum_closed(n, tspan, state0):
     link = SOA.SimpleLink(m,l_hinge)
     link.set_hingemap("spherical")
     
+    #result, V_f = SOA.RK4_int_with_V(ODEfun, state0, tspan, n, link)
+    V_f = None # Placeholder for V_f, since we are not actually running the simulation here.
 
-    result = SOA.RK4_int_with_V(ODEfun, state0, tspan, n, link)
+    result = solve_ivp(
+        ODEfun,
+        t_span=(0, tspan[-1]), 
+        y0=state0, 
+        method='Radau',
+        t_eval=tspan,
+        args=(n, link),
+        rtol=1e-6,
+        atol=1e-9
+        )
     
-    # result = solve_ivp(
-    #     ODEfun,
-    #     t_span=(0, tspan[-1]), 
-    #     y0=state0, 
-    #     method='Radau',
-    #     t_eval=tspan,
-    #     args=(n, link),
-    #     rtol=1e-6,
-    #     atol=1e-9
-    #     )
-    
-    return result, V_values, link
-    
+    return result, V_f, link
+
 
 
 ### SIMULATION SETTINGS ###
 n_bodies = 4
-tspan = np.arange(0, 10, 0.001)
+tspan = np.arange(0, 2, 0.001)
 state0 = iniconf.N4_square(n_bodies)
 
 # Running and timing the simulation
 start = time.perf_counter()
-result, V_values, link = N_body_pendulum_closed(n_bodies, tspan, state0)
+result, V_f, link = N_body_pendulum_closed(n_bodies, tspan, state0)
 end = time.perf_counter()
 
 # Extract the state matrix (Shape: [states, time_steps])
 y_out = result.y
+t_out = result.t
 
 # Clean up any microscopic quaternion drift in the final output
-for i in range(len(result.t)):
+for i in range(len(t_out)):
     # Ensure we are using your safe, non-mutating normalize_quaternions function
     y_out[:4*n_bodies, i] = SOA.normalize_quaternions(y_out[:4*n_bodies, i])
 
 # For animation
 step = 30 
 
-t_anim = result.t[::step]
+t_anim = t_out[::step]
 y_anim = y_out[:, ::step]
 
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
-print(f"Success: {result.success}")
-print(f"Solver status: {result.message}")
-print(f"Number of function evaluations: {result.nfev}")
+#print(f"Success: {result.success}")
+#print(f"Solver status: {result.message}")
+#print(f"Number of function evaluations: {result.nfev}")
 print("========================================================================================")
 
-SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]),save_video=False)
+l_vec = np.array([0,0,0.2])
+SOAplt.plot_initial_state(state0, link, config="closed")
 
-SOAplt.check_energies(result, V_values, tspan, link, n_bodies, "closed")
+SOAplt.animate_n_bodies(t_anim, y_anim, l_vec, save_video=False)
+
+SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
+
+#SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
+

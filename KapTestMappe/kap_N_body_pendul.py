@@ -3,9 +3,9 @@ from os import link
 import matplotlib
 import matplotlib.pyplot as plt 
 import numpy as np
-import soa as SOA
+import kap_soa as SOA
 from scipy.integrate import solve_ivp
-import plotting as SOAplt
+import kap_plotting as SOAplt
 import time
 
 def N_body_pendulum(n, tspan):

@@ -8,7 +8,7 @@ def N4_square(n):
     q_all = np.tile(qn, n)
     
     # Create the zero vectors for the other initial velocities states (n, 3)
-    ωn = np.array([0,0*np.pi/5,0])
+    ωn = np.array([0,0,0])
     ω1 = np.zeros(3)
     ω1_tiled = np.tile(ω1, n-1)
     ω_all = np.concatenate([ω1_tiled, ωn])
@@ -20,9 +20,9 @@ def N4_square(n):
 
 def N3_triangle(n):
     # Calculate initial config for n bodies
-    q3 = SOA.quatfromrev(0*np.pi/4, "y")
-    q2 = SOA.quatfromrev(5*np.pi/6, "y")
-    q1 = SOA.quatfromrev(5*np.pi/6, "y")
+    q3 = SOA.quatfromrev(1*np.pi/4, "y")
+    q2 = SOA.quatfromrev(2*np.pi/3, "y")
+    q1 = SOA.quatfromrev(2*np.pi/3, "y")
     q_all = np.concatenate([q1, q2, q3])
 
     # Create the zero vectors for the other initial velocities states (n, 3)
@@ -36,13 +36,13 @@ def N3_triangle(n):
 
 def N9_triangle(n):
     # Calculate initial config for n bodies
-    q9 = SOA.quatfromrev(np.pi/4, "y")
+    q9 = SOA.quatfromrev(1*np.pi/6, "y")
     q8 = SOA.quatfromrev(0, "y")
     q7 = SOA.quatfromrev(0, "y")
-    q6 = SOA.quatfromrev(np.pi/4, "y")
+    q6 = SOA.quatfromrev(2*np.pi/3, "y")
     q5 = SOA.quatfromrev(0, "y")
     q4 = SOA.quatfromrev(0, "y")
-    q3 = SOA.quatfromrev(np.pi/2, "y")
+    q3 = SOA.quatfromrev(2*np.pi/3, "y")
     q2 = SOA.quatfromrev(0, "y")
     q1 = SOA.quatfromrev(0, "y")
     
