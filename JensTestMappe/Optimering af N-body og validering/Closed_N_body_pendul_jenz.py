@@ -55,15 +55,14 @@ def N_body_pendulum_closed(n):
         # Rotate everything to the Inertial frame (has to be done on both sides)
         Λ_11 = IR1 @ Λ_11 @ IR1.T
         Λ_nn = IRn @ Λ_nn @ IRn.T
-        Λ_n1 = IR1 @ Λ_n1 @ IR1.T 
-        Λ_1n = IR1 @ Λ_1n @ IR1.T 
+        Λ_n1 = IRn @ Λ_n1 @ IR1.T 
+        Λ_1n = IR1 @ Λ_1n @ IRn.T 
 
         # Build the 12x12 block matrix
         Λ_block = np.block([
             [Λ_nn, Λ_n1],
             [Λ_1n, Λ_11]
         ])
-
 
         positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
 
@@ -76,9 +75,10 @@ def N_body_pendulum_closed(n):
         Φ_dot = IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
         Φ_ddot =  IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
         
+        
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 20) # Parametrene er vi slet ikke sikker på) AYO HVORFOR FUCK HEDDER DEN F
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 20, 20) # Parametrene er vi slet ikke sikker på) AYO HVORFOR FUCK HEDDER DEN F
 
         #solving for lagrange multipliers
         λ = -np.linalg.solve((Q@Λ_block@Q.T),f) # Dimension: 3x1
@@ -105,21 +105,20 @@ def N_body_pendulum_closed(n):
 
 
         # ##-DEBUGGING ---------------------------------- 
-        # if t < 1e-10:
-        #     print("=== t=0 diagnostics ===")
-        #     print(f"Φ:      {Φ}")
-        #     print(f"|Φ|:    {np.linalg.norm(Φ):.10f}")
-        #     print(f"Φ_dot:  {Φ_dot}")
-        #     print(f"|Φ_dot|:{np.linalg.norm(Φ_dot):.10f}")
-        #     print(f"Φ_ddot: {Φ_ddot}")
-        #     print(f"|Φ_ddot|:{np.linalg.norm(Φ_ddot):.10f}")
-        #     print(f"λ:      {λ}")
-        #     print(f"f_c[1]: {f_c[1]}")
-        #     print(f"constraint force in clobal coords:{f_c_closed_loop_const}")
-        #     print(f"beta_dot_f:     {beta_dot_f}")
-        #     print(f"beta_dot_delta: {beta_dot_delta}")
-        #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
-            
+        if t < 1e-10:
+            print("=== t=0 diagnostics ===")
+            print(f"Φ:      {Φ}")
+            print(f"|Φ|:    {np.linalg.norm(Φ):.10f}")
+            print(f"Φ_dot:  {Φ_dot}")
+            print(f"|Φ_dot|:{np.linalg.norm(Φ_dot):.10f}")
+            print(f"Φ_ddot: {Φ_ddot}")
+            print(f"|Φ_ddot|:{np.linalg.norm(Φ_ddot):.10f}")
+            print(f"λ:      {λ}")
+            print(f"f_c[1]: {f_c[1]}")
+            print(f"constraint force in clobal coords:{f_c_closed_loop_const}")
+            print(f"beta_dot_f:     {beta_dot_f}")
+            print(f"beta_dot_delta: {beta_dot_delta}")
+            print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
         return state_dot
         
 
@@ -134,22 +133,9 @@ def N_body_pendulum_closed(n):
     state0 = N4_stardown_initial_config(n)
     
     tspan = np.arange(0, 5, 0.001)
-    #result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
+    result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
 
-    # Extract time and state vectors
-    
-    result = solve_ivp(
-        ODEfun,
-        t_span=(0, tspan[-1]), 
-        y0=state0, 
-        method='Radau',
-        t_eval=tspan,
-        args=(n, link),
-        rtol=1e-6,
-        atol=1e-9
-        )
-    
-    return result
+    return result,tspan
     
 
 #ONLY for 4 links right now due to initial config.
@@ -225,16 +211,16 @@ n_bodies = 4
 
 start = time.perf_counter()
 
-result = N_body_pendulum_closed(n_bodies)
+result,tspan = N_body_pendulum_closed(n_bodies)
 
 end = time.perf_counter()
 
 
 # Extract the state matrix (Shape: [states, time_steps])
-y_out = result.y
+y_out = result
     
 # Clean up any microscopic quaternion drift in the final output
-for i in range(len(result.t)):
+for i in range(len(tspan)):
     # Ensure we are using your safe, non-mutating normalize_quaternions function
     y_out[:4*n_bodies, i] = SOA.normalize_quaternions(y_out[:4*n_bodies, i])
 
@@ -242,15 +228,12 @@ for i in range(len(result.t)):
 #til animation
 step = 5
 
-t_anim = result.t[::step]
+t_anim = tspan[::step]
 y_anim = y_out[:, ::step]
 
 SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]),save_video=False)
 
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
-print(f"Success: {result.success}")
-print(f"Solver status: {result.message}")
-print(f"Number of function evaluations: {result.nfev}")
 print("========================================================================================")
 
