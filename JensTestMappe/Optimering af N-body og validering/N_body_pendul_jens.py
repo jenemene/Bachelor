@@ -22,7 +22,8 @@ def N_body_pendulum(n):
 
     def odefun(t, state, n, link,RBT):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
-
+        if t % 1 == 0:
+            print(t)
         #unpacking state
         theta = state[:4*n]
         beta = state[4*n:]
@@ -165,16 +166,18 @@ def N_body_pendulum(n):
     #         # Extract time and state vectors
     # return result
 
-    tspan = np.arange(0, 50,0.03)
+    tspan = np.arange(0, 10,0.001)
     result,V_values = SOA.RK4_int_with_V(odefun,state0,tspan,n,link,RBT)
 
-    return result,tspan,V_values
+
+
+    return result,tspan,V_values,link
 
 
 def initial_config(n):
     # Calculate initial config for n bodies
     # q0: All aligned and tilted to some side
-    qn = SOA.quatfromrev(3*np.pi/4, "y")
+    qn = SOA.quatfromrev(np.pi/2, "y")
     q_rest = np.array([0,0,0,1])
     q_rest_tiled = np.tile(q_rest, n-1)
     
@@ -187,11 +190,11 @@ def initial_config(n):
     return state0
 
 
-n_bodies = 10
+n_bodies = 5
 
 start = time.perf_counter()
 
-result,tspan,V_values = N_body_pendulum(n_bodies)
+result,tspan,V_values,link = N_body_pendulum(n_bodies)
 
 end = time.perf_counter()
 
@@ -199,7 +202,14 @@ print(f"Integration time: {end - start:.6f} seconds")
 
 SOAplt.N_body_pendulum_gen_plot(tspan,result,n_bodies)
 
-SOAplt.animate_n_bodies(tspan,result, np.array([0,0,0.5]),False)
+step = 5
+
+t_anim = tspan[::step]
+y_anim = result[:, ::step]
+
+
+
+SOAplt.animation_plot(y_anim,t_anim, link,config="open")
 
 #SOAplt.animate_n_bodies(result.t,result.y, np.array([0,0,0.5]))
 

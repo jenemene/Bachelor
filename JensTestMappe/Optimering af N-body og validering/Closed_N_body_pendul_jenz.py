@@ -62,7 +62,7 @@ def N_body_pendulum_closed(n):
         Λ_block = np.block([
             [Λ_nn, Λ_n1],
             [Λ_1n, Λ_11]
-        ]).T
+        ])
 
         positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
 
@@ -85,14 +85,14 @@ def N_body_pendulum_closed(n):
 
 
         #calculating f_c (skal ændred noget her)
-        f_c_closed_loop_const =  0*Q.T@λ
+        f_c_closed_loop_const =  -Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
 
         f_c[n] = IRn.T @ f_c_closed_loop_const[:6]
         f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const[6:] # SKAL VÆRE SÅDAN HER!!!
 
-
+        print(t)
         #calculating beta_dot_delta
         beta_dot_delta_list = SOA.beta_dot_delta(theta,tau_bar,link,n,D,f_c,G) #returns a list
 
@@ -132,10 +132,10 @@ def N_body_pendulum_closed(n):
     #initial config.
     state0 = N4_initial_config(n)
     
-    tspan = np.arange(0, 10, 0.001)
+    tspan = np.arange(0, 5, 0.001)
     result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
 
-    return result,tspan
+    return result,tspan,link
     
 
 #ONLY for 4 links right now due to initial config.
@@ -149,7 +149,7 @@ def N4_initial_config(n):
     ωn = np.array([0,np.pi/2,0])
     ω1 = np.zeros(3)
     ω1_tiled = np.tile(ω1, n-1)
-    ω_all = np.concatenate([ω1_tiled, ωn]) # <------------------- Jeg har lige sat den til 0 :)
+    ω_all = np.concatenate([ω1_tiled, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
 
     # Concatenate into one long state vector
     state0 = np.concatenate([q_all, ω_all])
@@ -211,7 +211,7 @@ n_bodies = 4
 
 start = time.perf_counter()
 
-result,tspan = N_body_pendulum_closed(n_bodies)
+result,tspan,link = N_body_pendulum_closed(n_bodies)
 
 end = time.perf_counter()
 
@@ -231,7 +231,7 @@ step = 5
 t_anim = tspan[::step]
 y_anim = y_out[:, ::step]
 
-SOAplt.animate_n_bodies(t_anim, y_anim, np.array([0,0,0.2]),save_video=False)
+SOAplt.animation_plot(result, tspan, link, config="closed")
 
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")

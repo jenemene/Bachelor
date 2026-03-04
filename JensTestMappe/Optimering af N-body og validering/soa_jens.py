@@ -222,7 +222,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0.00 # Damping coefficient
+            b = 0.05 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -245,7 +245,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
         tau_bar[0] = P_plus[0]
-        A[n+1] = np.array([0, 0, 0, 0, 0, 0*9.81])
+        A[n+1] = np.array([0, 0, 0, 0, 0, 9.81])
         V[n+1] = np.zeros((6,))
 
         #kinematics scatter
@@ -375,7 +375,7 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
         cRp = pRc.T 
         
         xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] - f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her JEG HAR ÆNDRET FRA MINUS TIL PLUS HER
-        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k]) #skulle være ok den her linje
+        nu[k] = np.linalg.solve(-D[k],link.H@xi_delta[k]) #skulle være ok den her linje
 
     for k in range(n,0,-1):
         pRc = spatialrotfromquat(theta[k]) 
