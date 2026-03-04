@@ -374,7 +374,7 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
         pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
         cRp = pRc.T 
         
-        xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] - f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her
+        xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] + f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her JEG HAR ÆNDRET FRA MINUS TIL PLUS HER
         nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k]) #skulle være ok den her linje
 
     for k in range(n,0,-1):

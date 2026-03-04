@@ -81,7 +81,7 @@ def N_body_pendulum_closed(n):
         f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 20) # Parametrene er vi slet ikke sikker på) AYO HVORFOR FUCK HEDDER DEN F
 
         #solving for lagrange multipliers
-        λ = np.linalg.solve((-Q@Λ_block@Q.T),f) # Dimension: 3x1
+        λ = -np.linalg.solve((Q@Λ_block@Q.T),f) # Dimension: 3x1
 
 
         #calculating f_c (skal ændred noget her)
