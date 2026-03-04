@@ -133,9 +133,9 @@ def N_body_pendulum_closed(n, tspan, state0):
 
 
 ### SIMULATION SETTINGS ###
-n_bodies = 2
-tspan = np.arange(0, 0.5, 0.001)
-state0 = iniconf.N2(n_bodies)
+n_bodies = 4
+tspan = np.arange(0, 10, 0.001)
+state0 = iniconf.N4_square(n_bodies)
 
 # Running and timing the simulation
 start = time.perf_counter()
@@ -165,7 +165,7 @@ print("=========================================================================
 
 l_vec = np.array([0,0,0.2])
 SOAplt.plot_initial_state(state0, l_vec)
-#SOAplt.animate_n_bodies(t_anim, y_anim, l_vec, save_video=False)
+SOAplt.animate_n_bodies(t_anim, y_anim, l_vec, save_video=False)
 
 #SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
 
