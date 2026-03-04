@@ -227,10 +227,10 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
             zk_pot = zk + z0[k] # potential height of current body
 
             if tspan[i] == 0.68:
-                print(f"Body {k}:")
-                print(zk)
-                print(z0[k])
-                print(zk_pot)
+                print(f"---Body {k}---")
+                print(f"zk: {zk}")
+                print(f"z0: {z0[k]}")
+                print(f"zk_pot: {zk_pot}")
 
             PE_link = link.m*g*zk_pot
             PE_t += PE_link
