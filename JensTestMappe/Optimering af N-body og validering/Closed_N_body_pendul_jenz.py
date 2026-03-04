@@ -16,7 +16,7 @@ def N_body_pendulum_closed(n):
         beta = state[4*n:]
 
         #normalizing quartenions
-        theta = SOA.normalize_quaternions(theta) 
+        #theta = SOA.normalize_quaternions(theta) 
         
         #calculating theta_dot based on the derrivmap function
         theta_dot = np.zeros(len(theta))
@@ -55,14 +55,14 @@ def N_body_pendulum_closed(n):
         # Rotate everything to the Inertial frame (has to be done on both sides)
         Λ_11 = IR1 @ Λ_11 @ IR1.T
         Λ_nn = IRn @ Λ_nn @ IRn.T
-        Λ_n1 = IRn @ Λ_n1 @ IR1.T 
-        Λ_1n = IR1 @ Λ_1n @ IRn.T 
+        Λ_n1 = IR1 @ Λ_n1 @ IR1.T 
+        Λ_1n = IR1 @ Λ_1n @ IR1.T 
 
         # Build the 12x12 block matrix
         Λ_block = np.block([
             [Λ_nn, Λ_n1],
             [Λ_1n, Λ_11]
-        ])
+        ]).T
 
         positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
 
@@ -85,7 +85,7 @@ def N_body_pendulum_closed(n):
 
 
         #calculating f_c (skal ændred noget her)
-        f_c_closed_loop_const =  -Q.T@λ
+        f_c_closed_loop_const =  0*Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
 
@@ -105,20 +105,20 @@ def N_body_pendulum_closed(n):
 
 
         # ##-DEBUGGING ---------------------------------- 
-        if t < 1e-10:
-            print("=== t=0 diagnostics ===")
-            print(f"Φ:      {Φ}")
-            print(f"|Φ|:    {np.linalg.norm(Φ):.10f}")
-            print(f"Φ_dot:  {Φ_dot}")
-            print(f"|Φ_dot|:{np.linalg.norm(Φ_dot):.10f}")
-            print(f"Φ_ddot: {Φ_ddot}")
-            print(f"|Φ_ddot|:{np.linalg.norm(Φ_ddot):.10f}")
-            print(f"λ:      {λ}")
-            print(f"f_c[1]: {f_c[1]}")
-            print(f"constraint force in clobal coords:{f_c_closed_loop_const}")
-            print(f"beta_dot_f:     {beta_dot_f}")
-            print(f"beta_dot_delta: {beta_dot_delta}")
-            print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
+        # if t < 1e-10:
+        #     print("=== t=0 diagnostics ===")
+        #     print(f"Φ:      {Φ}")
+        #     print(f"|Φ|:    {np.linalg.norm(Φ):.10f}")
+        #     print(f"Φ_dot:  {Φ_dot}")
+        #     print(f"|Φ_dot|:{np.linalg.norm(Φ_dot):.10f}")
+        #     print(f"Φ_ddot: {Φ_ddot}")
+        #     print(f"|Φ_ddot|:{np.linalg.norm(Φ_ddot):.10f}")
+        #     print(f"λ:      {λ}")
+        #     print(f"f_c[1]: {f_c[1]}")
+        #     print(f"constraint force in clobal coords:{f_c_closed_loop_const}")
+        #     print(f"beta_dot_f:     {beta_dot_f}")
+        #     print(f"beta_dot_delta: {beta_dot_delta}")
+        #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
         return state_dot
         
 
@@ -130,9 +130,9 @@ def N_body_pendulum_closed(n):
     link.set_hingemap("spherical")
 
     #initial config.
-    state0 = N4_stardown_initial_config(n)
+    state0 = N4_initial_config(n)
     
-    tspan = np.arange(0, 5, 0.001)
+    tspan = np.arange(0, 10, 0.001)
     result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
 
     return result,tspan
@@ -146,10 +146,10 @@ def N4_initial_config(n):
     q_all = np.tile(qn, n)
     
     # Create the zero vectors for the other initial velocities states (n, 3)
-    ωn = np.array([0,np.pi/5,0])
+    ωn = np.array([0,np.pi/2,0])
     ω1 = np.zeros(3)
     ω1_tiled = np.tile(ω1, n-1)
-    ω_all = np.concatenate([ω1_tiled, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
+    ω_all = np.concatenate([ω1_tiled, ωn]) # <------------------- Jeg har lige sat den til 0 :)
 
     # Concatenate into one long state vector
     state0 = np.concatenate([q_all, ω_all])
