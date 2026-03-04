@@ -1,4 +1,5 @@
 import numpy as np
+
 def rotfromquat(quat):
     #Convert a quaternion to a rotation matrix.
 
@@ -177,7 +178,7 @@ def normalize_quaternions(q):
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
         
-def ATBI_N_body_pendulum(state,tau_vec,n,link):
+def ATBI(state,tau_vec,n,link):
         #inputs
         #state: np.array on form [theta_dot, beta]
         #tau_vec: generalized forces as np.array
@@ -222,7 +223,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0.2 # Damping coefficient
+            b = 0 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -240,19 +241,12 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         tau_bar = [None]*(n+2)
         agothic = [None]*(n+2)
         bgothic = [None]*(n+2)
-        
-        #gravity and storage of gravity
-        g = [None]*(n+2)
-        g[n+1] = np.array([0,0,0,0,0,0*9.81]) #in inertial frame 
-
-        g_f = [None]*(n+2)
-        g_f[n+1] = np.array([0,0,0,0,0,9.81])
 
         #boundary conditions on spatial operator quantities
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
         tau_bar[0] = P_plus[0]
-        A[n+1] = np.array([0, 0, 0, 0, 0, 0])
+        A[n+1] = np.array([0, 0, 0, 0, 0, 9.81]) # Psudo gravity in the last frame, which is the inertial frame
         V[n+1] = np.zeros((6,))
 
         #kinematics scatter
@@ -261,10 +255,6 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             #rotation matrices
             pRc = spatialrotfromquat(theta[k]) 
             cRp = pRc.T #from parent to child -> this is the direction we are going right now
-
-            #rotating gravity such that we have that in frame aswell
-            g[k] = cRp@g[k+1]
-            g_f[k] = cRp@g_f[k+1]
 
             #hinge contribtuion
             delta_V = link.H.T @ beta[k]
@@ -290,7 +280,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             G[k] = np.linalg.solve(D[k], link.H @ P).T #P @ link.H.T @ np.linalg.inv(D)
             tau_bar[k] = np.eye(6) - G[k] @ link.H
             P_plus[k] = tau_bar[k] @ P
-            xi = link.RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] - RBT(link.l_com)@link.M@g_f[k]
+            xi = link.RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
             eps = tau[k] - link.H@xi
             nu[k] = np.linalg.solve(D[k], eps) #= np.linalg.inv(D)@eps
             xi_plus[k] = xi + G[k]@eps
@@ -302,11 +292,10 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             cRp = pRc.T 
 
             A_plus = cRp@ link.RBT.T @A[k+1]
-            nu_bar = nu[k] - G[k].T @ g[k]  
-            beta_dot[k] = nu_bar - G[k].T @ A_plus
+            beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
-        return A, V, beta_dot,tau_bar,D,G #which is theta_ddot depending on how you look at it
+        return A, V, beta_dot, tau_bar, D, G
     
 def omega(theta_vec,link,tau_bar,D,n):
     #unpacking generalized coordinates
@@ -460,6 +449,7 @@ def compute_pos_in_inertial_frame(theta_vec, l_vec, n):
         pRc = rotfromquat(theta[i])
 
         positions[i] = positions[i+1] + R_cumulative @ l_vec
+
         R_cumulative = R_cumulative @ pRc
 
     return positions
@@ -482,7 +472,7 @@ def compute_com_pos_in_inertial_frame(theta_vec, l_vec, n):
     positions[n] = np.zeros(3)
     com_positions[n] = R_cumulative @ l_vec*0.5
 
-    for i in range(n-1,0,-1):        
+    for i in range(n-1,0,-1):
         pRc = rotfromquat(theta[i])
 
         positions[i] = positions[i+1] + R_cumulative @ l_vec

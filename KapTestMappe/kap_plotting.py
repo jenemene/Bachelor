@@ -86,67 +86,6 @@ def N_body_pendulum_gen_plot(t_vals,y_vals,n_bodies):
     plt.tight_layout()
     plt.show()
 
-def animate_n_bodies(time, states, l_vec, save_video=False): # Added toggle
-    n_states, N = states.shape
-    n = int(n_states / 7) + 1
-    n_joints = n - 1
-    quat_block_size = 4 * n_joints
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    plotlim = (n+1) * np.linalg.norm(l_vec)
-    ax.set_xlim([-plotlim, plotlim])
-    ax.set_ylim([-plotlim, plotlim])
-    ax.set_zlim([-plotlim, plotlim])
-
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-
-    line, = ax.plot([], [], [], 'o-', lw=2)
-
-    def compute_positions(state_k):
-        # ... (Your existing FK logic remains the same) ...
-        quat_block = state_k[:quat_block_size]
-        quats = [quat_block[4*i:4*(i+1)] for i in range(n_joints)]
-        R_cumulative = []
-        R = np.eye(3)
-        for q in reversed(quats):
-            R = R @ SOA.rotfromquat(q)
-            R_cumulative.insert(0, R.copy())
-        positions = [np.zeros(3)]
-        for i in range(n_joints):
-            positions.append(positions[-1] + R_cumulative[i] @ l_vec)
-        return np.array(positions)
-
-    def update(frame):
-        state_k = states[:, frame]
-        positions = compute_positions(state_k)
-        line.set_data(positions[:, 0], positions[:, 1])
-        line.set_3d_properties(positions[:, 2])
-        ax.set_title(f"t = {time[frame]:.3f} s")
-        return line,
-
-    dt = np.mean(np.diff(time))
-    interval = dt * 1000
-
-    ani = animation.FuncAnimation(
-        fig, update, frames=N, interval=interval, blit=False
-    )
-
-    # --- NEW SAVE LOGIC ---
-    if save_video:
-        print("Rendering video... please wait.")
-        # fps=30 is standard; bitrate helps with quality
-        writer = FFMpegWriter(fps=30, metadata=dict(artist='Jenz'), bitrate=2000)
-        ani.save("bachelor_animation.mp4", writer=writer)
-        print("Video saved as bachelor_animation.mp4")
-
-    ax.view_init(elev=0, azim=-90, roll=0)
-    plt.show()
-    return ani
-
 def plot_initial_state(state0, link, config="openclosed"):
     # Number of bodies
     n_bodies = int(state0.shape[0] / 7)    
@@ -225,12 +164,6 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
             # Potential energy
             zk = com_pos[k][-1] # z-pos of current body k
             zk_pot = zk + z0[k] # potential height of current body
-
-            if tspan[i] == 0.68:
-                print(f"---Body {k}---")
-                print(f"zk: {zk}")
-                print(f"z0: {z0[k]}")
-                print(f"zk_pot: {zk_pot}")
 
             PE_link = link.m*g*zk_pot
             PE_t += PE_link

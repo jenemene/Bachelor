@@ -182,4 +182,3 @@ SOAplt.animate_n_bodies(t_anim, y_anim, l_vec, save_video=False)
 SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
 
 SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
-

@@ -222,7 +222,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0.05 # Damping coefficient
+            b = 0 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -294,7 +294,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
-        return A, V, beta_dot, tau_bar, D, G #which is theta_ddot depending on how you look at it
+        return A, V, beta_dot, tau_bar, D, G
     
 def omega(theta_vec,link,tau_bar,D,n):
     #unpacking generalized coordinates

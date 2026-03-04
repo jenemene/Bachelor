@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.animation as animation
-import soa as SOA
+from utils import soa as SOA
+from matplotlib.animation import FuncAnimation
 from matplotlib.animation import FFMpegWriter # Add this import
 
 def spatial_plot(t, spatialquantity, type="spatialquantity",bodyno="body number"):
@@ -85,83 +86,21 @@ def N_body_pendulum_gen_plot(t_vals,y_vals,n_bodies):
     plt.tight_layout()
     plt.show()
 
-def animate_n_bodies(time, states, l_vec, save_video=False): # Added toggle
-    n_states, N = states.shape
-    n = int(n_states / 7) + 1
-    n_joints = n - 1
-    quat_block_size = 4 * n_joints
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    plotlim = (n+1) * np.linalg.norm(l_vec)
-    ax.set_xlim([-plotlim, plotlim])
-    ax.set_ylim([-plotlim, plotlim])
-    ax.set_zlim([-plotlim, plotlim])
-
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-
-    line, = ax.plot([], [], [], 'o-', lw=2)
-
-    def compute_positions(state_k):
-        # ... (Your existing FK logic remains the same) ...
-        quat_block = state_k[:quat_block_size]
-        quats = [quat_block[4*i:4*(i+1)] for i in range(n_joints)]
-        R_cumulative = []
-        R = np.eye(3)
-        for q in reversed(quats):
-            R = R @ SOA.rotfromquat(q)
-            R_cumulative.insert(0, R.copy())
-        positions = [np.zeros(3)]
-        for i in range(n_joints):
-            positions.append(positions[-1] + R_cumulative[i] @ l_vec)
-        return np.array(positions)
-
-    def update(frame):
-        state_k = states[:, frame]
-        positions = compute_positions(state_k)
-        line.set_data(positions[:, 0], positions[:, 1])
-        line.set_3d_properties(positions[:, 2])
-        ax.set_title(f"t = {time[frame]:.3f} s")
-        return line,
-
-    dt = np.mean(np.diff(time))
-    interval = dt * 1000 
-
-    ani = animation.FuncAnimation(
-        fig, update, frames=N, interval=interval, blit=False
-    )
-
-    # --- NEW SAVE LOGIC ---
-    if save_video:
-        print("Rendering video... please wait.")
-        # fps=30 is standard; bitrate helps with quality
-        writer = FFMpegWriter(fps=30, metadata=dict(artist='Jenz'), bitrate=2000)
-        ani.save("bachelor_animation.mp4", writer=writer)
-        print("Video saved as bachelor_animation.mp4")
-
-    ax.view_init(elev=0, azim=-90, roll=0)
-    plt.show()
-    return ani
-
-def plot_initial_state(state0, l_vec):
-    """
-    Plots the initial 3D configuration of the n-body system.
-    """
-    n_states = len(state0)
-    # Reconstructing the number of bodies/joints from the state vector size
-    # Based on: n_states = 7 * (n - 1) 
-    n = int(n_states / 7) + 1
-    n_joints = n - 1
-    quat_block_size = 4 * n_joints
+def plot_initial_state(state0, link, config="openclosed"):
+    # Number of bodies
+    n_bodies = int(state0.shape[0] / 7)    
 
     fig = plt.figure(figsize=(8, 6))
     ax = fig.add_subplot(111, projection='3d')
 
-    # Setting plot limits based on the total reach of the chain
-    plotlim = n * np.linalg.norm(l_vec)
+    # Defining plotlim based on the number of bodies, link length and configuration
+    if config == "open":
+        plotlim = (n_bodies+1) * np.linalg.norm(link.l_hinge)
+    elif config == "closed":
+        plotlim = ((n_bodies+1) * np.linalg.norm(link.l_hinge))/2
+    else:
+        raise ValueError("Invalid config value. Use 'open' or 'closed'.")
+    
     ax.set_xlim([-plotlim, plotlim])
     ax.set_ylim([-plotlim, plotlim])
     ax.set_zlim([-plotlim, plotlim])
@@ -171,23 +110,14 @@ def plot_initial_state(state0, l_vec):
     ax.set_zlabel("Z")
     ax.set_title("Initial State Configuration")
 
-    # Forward Kinematics Logic
-    quat_block = state0[:quat_block_size]
-    quats = [quat_block[4*i:4*(i+1)] for i in range(n_joints)]
-    
-    R_cumulative = []
-    R = np.eye(3)
-    
-    # Calculate cumulative rotations
-    for q in reversed(quats):
-        # Assuming SOA.rotfromquat is available in your namespace
-        R = R @ SOA.rotfromquat(q)
-        R_cumulative.insert(0, R.copy())
+    # Compute positions of the bodies in inertial frame based on the initial state
+    positions = SOA.compute_pos_in_inertial_frame(state0[:4*n_bodies], link.l_hinge, n_bodies)
 
-    # Calculate positions of each joint/link end
-    positions = [np.zeros(3)]
-    for i in range(n_joints):
-        positions.append(positions[-1] + R_cumulative[i] @ l_vec)
+    # positions is constructed as a list of arrays, where the index 0 is empty. We can conveniently insert the tip of the last link as the first element in the list,
+    # so we have all positions needed for plottigng in one array.
+    R3_tip2I = SOA.get_rotation_tip_to_body_I(state0[:4*n_bodies], n_bodies)[:3,:3]
+    tip_pos = (positions[1] + R3_tip2I @ link.l_hinge).flatten()
+    positions[0] = tip_pos
     
     pos_array = np.array(positions)
 
@@ -235,11 +165,6 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
             zk = com_pos[k][-1] # z-pos of current body k
             zk_pot = zk + z0[k] # potential height of current body
 
-            if i == 0:
-                print(f"Body {k}:")
-                print(zk)
-                print(z0[k])
-
             PE_link = link.m*g*zk_pot
             PE_t += PE_link
 
@@ -262,3 +187,65 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
     plt.grid(True, alpha=0.5)
 
     plt.show()
+
+def animation_plot(states, tspan, link, config="openclosed"):
+    # Number of bodies
+    n_bodies = int(states.shape[0] / 7)
+
+    # Number of time steps
+    assert states.shape[1] == len(tspan), "Number of time steps in states must match length of tspan"
+    N = states.shape[1]
+
+    # Setting up the figure and 3D axis
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Defining plotlim based on the number of bodies, link length and configuration
+    if config == "open":
+        plotlim = (n_bodies+1) * np.linalg.norm(link.l_hinge)
+    elif config == "closed":
+        plotlim = ((n_bodies+1) * np.linalg.norm(link.l_hinge))/2
+    else:
+        raise ValueError("Invalid config value. Use 'open' or 'closed'.")
+
+    # Set plot limits and labels
+    ax.set_xlim([-plotlim, plotlim])
+    ax.set_ylim([-plotlim, plotlim])
+    ax.set_zlim([-plotlim, plotlim])
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+
+    # Initialize the line object that will be updated in the animation
+    line, = ax.plot([], [], [], 'o-', lw=2)
+
+    # Computes the positions of the joints/links based on the state vector at each time step AND position of the tip of the last link
+    def compute_positions(state_k):
+        positions = SOA.compute_pos_in_inertial_frame(state_k[:4*n_bodies], link.l_hinge, n_bodies)
+        
+        # positions is constructed as a list of arrays, where the index 0 is empty. We can conveniently insert the tip of the last link as the first element in the list,
+        # so we have all positions in one array.
+        R6_tip2I = SOA.get_rotation_tip_to_body_I(state_k[:4*n_bodies], n_bodies)
+        R3_tip2I = R6_tip2I[:3,:3]
+        tip_pos = (positions[1] + R3_tip2I @ link.l_hinge).flatten()
+        positions[0] = tip_pos
+        return np.array(positions) # Convert list of arrays to a single 2D array of shape (n_bodies+1, 3) for easier plotting
+    
+    # Update function for animation
+    def update(frame):
+        state_k = states[:, frame]
+        positions = compute_positions(state_k)
+        line.set_data(positions[:, 0], positions[:, 1])
+        line.set_3d_properties(positions[:, 2])
+        ax.set_title(f"t = {tspan[frame]:.3f} s")
+
+    # Just a robust way of calculating the interval between frames for the animation, based on the time vector. Could also do tspan[1] - tspan[0]. 
+    dt = np.mean(np.diff(tspan))
+    interval = dt * 1000 # Convert to milliseconds for FuncAnimation
+    ani = FuncAnimation(
+        fig, update, frames=N, interval=interval, blit=False
+    )
+    
+    ax.view_init(elev=0, azim=-90, roll=0)
+    plt.show()
+    return ani
