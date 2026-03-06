@@ -1,4 +1,3 @@
-from os import link
 import numpy as np
 from utils import soa as SOA
 from utils import plotting as SOAplt
