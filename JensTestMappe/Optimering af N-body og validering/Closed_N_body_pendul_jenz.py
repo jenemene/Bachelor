@@ -1,9 +1,6 @@
-import matplotlib
-from matplotlib.pylab import norm
-import matplotlib.pyplot as plt 
 import numpy as np
 import soa_jens as SOA
-from scipy.integrate import solve_ivp
+#from scipy.integrate import solve_ivp
 import jens_plotting as SOAplt
 import time
 
