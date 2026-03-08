@@ -3,6 +3,7 @@ import soa_jens as SOA
 #from scipy.integrate import solve_ivp
 import jens_plotting as SOAplt
 import time
+import matplotlib.pyplot as plt
 
 def N_body_pendulum_closed(n):
     def ODEfun(t,state,n,link):
@@ -82,7 +83,7 @@ def N_body_pendulum_closed(n):
 
 
         #calculating f_c (skal ændred noget her)
-        f_c_closed_loop_const =  -Q.T@λ
+        f_c_closed_loop_const =  Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
 
@@ -98,7 +99,6 @@ def N_body_pendulum_closed(n):
         beta_dot = beta_dot_delta + beta_dot_f
 
         state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
-
 
 
         # ##-DEBUGGING ---------------------------------- 

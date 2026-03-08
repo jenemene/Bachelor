@@ -561,3 +561,6 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n,link,RBT):
 
     return Y, V_storage
     
+def constraint_violation(Φ):
+    violation = Φ.T @ Φ
+    return violation

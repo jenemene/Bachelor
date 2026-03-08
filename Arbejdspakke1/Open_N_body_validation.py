@@ -75,7 +75,7 @@ tspan = np.arange(0, simulation_length+dt, dt)
 Y, V_values, link = N_body_pendulum(n_bodies, link, tspan, state0)
 
 ### ANIMATION ###
-SOAplt.animation_plot(Y, tspan, link, config="open")
-
+anim = SOAplt.animation_plot(Y, tspan, link, config="open")
 ### ENERGY CHECK ###
 SOAplt.check_energies(Y, V_values, tspan, link, n_bodies,"open")
+
