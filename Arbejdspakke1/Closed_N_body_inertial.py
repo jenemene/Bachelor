@@ -51,7 +51,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         #calculating block entires and rotating to frame I
         Λ_11 =link.RBT.T @ omega_11 @ link.RBT
 
-        Λ_block =  IR1 @ Λ_11 @IR1.T
+        Λ_block =  IR1 @ Λ_11 @ IR1.T
 
 
         positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
@@ -65,7 +65,7 @@ def N_body_pendulum_closed(n, tspan, state0):
 
         print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.8f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 2500, 2000) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 2000, 2500) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -88,29 +88,10 @@ def N_body_pendulum_closed(n, tspan, state0):
 
 
 
-        # ##-DEBUGGING ---------------------------------- 
-        # if t < 1e-10:
-        #     print("=== t=0 diagnostics ===")
-        #     print(f"Φ:      {Φ}")
-        #     print(f"|Φ|:    {np.linalg.norm(Φ):.10f}")
-        #     print(f"Φ_dot:  {Φ_dot}")
-        #     print(f"|Φ_dot|:{np.linalg.norm(Φ_dot):.10f}")
-        #     print(f"Φ_ddot: {Φ_ddot}")
-        #     print(f"|Φ_ddot|:{np.linalg.norm(Φ_ddot):.10f}")
-        #     print(f"λ:      {λ}")
-        #     print(f"f_c[1]: {f_c[1]}")
-        #     print(f"constraint force in clobal coords:{f_c_closed_loop_const}")
-        #     print(f"beta_dot_f:     {beta_dot_f}")
-        #     print(f"beta_dot_delta: {beta_dot_delta}")
-        #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
-        
-
-        if t % 1 == 0: # Print every 1 second
-            print(t)
         return state_dot, V_f
     
     #setting up link
-    m = 2 #mass in kg
+    m = 20 #mass in kg
     l_hinge = np.array([0,0,0.2])
     link = SOA.SimpleLink(m,l_hinge)
     link.set_hingemap("spherical")
@@ -134,7 +115,7 @@ def N_body_pendulum_closed(n, tspan, state0):
 
 ### SIMULATION SETTINGS ###
 n_bodies = 3
-tspan = np.arange(0, 5, 0.001)
+tspan = np.arange(0, 10, 0.001)
 state0 = iniconf.N3_triangle(n_bodies)
 
 # Running and timing the simulation
@@ -166,6 +147,6 @@ print("=========================================================================
 SOAplt.plot_initial_state(state0, link,"closed")
 SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
 
-#SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed_3")
-#SOAplt.check_total_energy(result,V_f,tspan,link,n_bodies,"closed_3")
+SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed_3")
+SOAplt.check_total_energy(result,V_f,tspan,link,n_bodies,"closed_3")
 

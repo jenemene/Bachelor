@@ -150,7 +150,7 @@ class SimpleLink:
 
         #calculating geometry (right now width and heigh of link is just 1/10 of length)
         l = np.linalg.norm(l_hinge)
-        w = l/10
+        w = l/50
         h = w
         self.J_c = np.diag([1/12*m*(h**2 + w**2), 1/12*m*(l**2 + h**2), 1/12*m*(l**2 + w**2)])
 

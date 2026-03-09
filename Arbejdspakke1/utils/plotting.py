@@ -1,3 +1,4 @@
+import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.animation as animation
@@ -131,6 +132,7 @@ def plot_initial_state(state0, link, config="openclosed"):
 
     return fig, ax
 
+
 def check_energies(result, V_values, tspan, link, n, config="openclosed"):
     timesteps = len(tspan)
     KE = np.zeros(timesteps)
@@ -153,9 +155,9 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
         z0 = np.insert(z0, 0, 0)
 
     elif config == "closed_3":
-        #assert n != 3, "Only for 3 bodies"
-        k = np.cos(np.pi/6)*link.l_com
-        zo = np.array([k, 2*k, k])
+        assert n == 3, "Only for 3 bodies"
+        k = np.cos(np.pi/6)*np.linalg.norm(link.l_com)
+        z0 = np.array([k, 2*k, k])
         z0 = np.insert(z0, 0, 0)
 
     for i in range(timesteps):
@@ -218,9 +220,9 @@ def check_total_energy(result, V_values, tspan, link, n, config="openclosed"):
         z0 = np.insert(z0, 0, 0)
 
     elif config == "closed_3":
-        #assert n != 3, "Only for 3 bodies"
+        assert n == 3, "Only for 3 bodies"
         k = np.cos(np.pi/6)*link.l_com
-        zo = np.array([k, 2*k, k])
+        z0 = np.array([k, 2*k, k])
         z0 = np.insert(z0, 0, 0)
 
     for i in range(timesteps):
@@ -255,8 +257,12 @@ def check_total_energy(result, V_values, tspan, link, n, config="openclosed"):
     plt.title(f"CHange in energy of the System with n={n} bodies")
     plt.xlabel("Time [s]")
     plt.ylabel("Energy [J]")
-    plt.legend()
     plt.grid(True, alpha=0.5)
+
+    # Force scientific notation for the y-axis
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
 
     plt.show()
 
