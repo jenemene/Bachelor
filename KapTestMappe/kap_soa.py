@@ -1,4 +1,5 @@
 import numpy as np
+
 def rotfromquat(quat):
     #Convert a quaternion to a rotation matrix.
 
@@ -57,7 +58,7 @@ def spatialskewbar(X):
     X_bar = np.block([[skewfromvec(X[:3]),skewfromvec(X[3:])],
              [np.zeros((3,3)),skewfromvec(X[:3])]])
     return X_bar
-  
+
 def spatialskewtilde(spatialvec):
     #Convert a 6D spatial vector to a 6x6 skew-symmetric matrix.
 
@@ -76,7 +77,7 @@ def spatialskewtilde(spatialvec):
     S = np.block([[w_tilde, np.zeros((3,3))],
                   [v_tilde, w_tilde]])
     return S
-    
+
 def spatialrotfromquat(quat):
     #Convert a quaternion to a 6x6 spatial rotation matrix.
 
@@ -176,7 +177,7 @@ def normalize_quaternions(q):
     norms = np.linalg.norm(q_reshaped, axis=1, keepdims=True)
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
-        
+
 def ATBI_N_body_pendulum(state,tau_vec,n,link):
         #inputs
         #state: np.array on form [theta_dot, beta]
@@ -222,7 +223,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0 # Damping coefficient
+            b = 0.1 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -245,7 +246,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
         tau_bar[0] = P_plus[0]
-        A[n+1] = np.array([0, 0, 0, 0, 0, 9.81]) # Psudo gravity in the last frame, which is the inertial frame
+        A[n+1] = np.array([0, 0, 0, 0, 0, 9.81])
         V[n+1] = np.zeros((6,))
 
         #kinematics scatter
@@ -253,7 +254,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
         for k in range(n,0,-1):
             #rotation matrices
             pRc = spatialrotfromquat(theta[k]) 
-            cRp = pRc.T #from parent to child -> this is the direction we are going right now
+            cRp = pRc.T #from parent to child -> this is the direction we are going right now]
 
             #hinge contribtuion
             delta_V = link.H.T @ beta[k]
@@ -281,7 +282,7 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             P_plus[k] = tau_bar[k] @ P
             xi = link.RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
             eps = tau[k] - link.H@xi
-            nu[k] = np.linalg.solve(D[k], eps) #= np.linalg.inv(D)@eps
+            nu[k] = np.linalg.solve(D[k], eps)
             xi_plus[k] = xi + G[k]@eps
 
         #ATBI scatter
@@ -290,12 +291,12 @@ def ATBI_N_body_pendulum(state,tau_vec,n,link):
             pRc = spatialrotfromquat(theta[k])
             cRp = pRc.T 
 
-            A_plus = cRp@ link.RBT.T @A[k+1]
+            A_plus = cRp@ link.RBT.T @A[k+1] 
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + link.H.T @ beta_dot[k] + agothic[k]
 
-        return A, V, beta_dot, tau_bar, D, G
-    
+        return A, V, beta_dot,tau_bar,D,G #which is theta_ddot depending on how you look at it
+
 def omega(theta_vec,link,tau_bar,D,n):
     #unpacking generalized coordinates
     theta = [None]*(n+2)
@@ -374,8 +375,8 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
         pRc = spatialrotfromquat(theta[k-1]) #using k-1 as orientation is defined as k+1_q_k and we need k_q_k-1
         cRp = pRc.T 
         
-        xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] - f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her
-        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k]) #skulle være ok den her linje
+        xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] - f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her JEG HAR ÆNDRET FRA MINUS TIL PLUS HER
+        nu[k] = np.linalg.solve(-D[k],link.H@xi_delta[k]) #skulle være ok den her linje
 
     for k in range(n,0,-1):
         pRc = spatialrotfromquat(theta[k]) 
@@ -448,7 +449,6 @@ def compute_pos_in_inertial_frame(theta_vec, l_vec, n):
         pRc = rotfromquat(theta[i])
 
         positions[i] = positions[i+1] + R_cumulative @ l_vec
-
         R_cumulative = R_cumulative @ pRc
 
     return positions
@@ -540,6 +540,7 @@ def RK4_int(odefun, initial_cond, time_vec, n,link):
 
     # initial V - spatial vel
 
+
     for i in range(N - 1):
         t = time_vec[i]
         y = Y[:, i]
@@ -553,7 +554,7 @@ def RK4_int(odefun, initial_cond, time_vec, n,link):
  
     return Y
 
-def RK4_int_with_V(odefun, initial_cond, time_vec, n,link):
+def RK4_int_with_V(odefun, initial_cond, time_vec, n, link):
     time_vec = np.asarray(time_vec)
     y0 = np.asarray(initial_cond).reshape(-1)
 
@@ -587,4 +588,7 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n,link):
     _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link)
 
     return Y, V_storage
-    
+
+def constraint_violation(Φ):
+    violation = Φ.T @ Φ
+    return violation

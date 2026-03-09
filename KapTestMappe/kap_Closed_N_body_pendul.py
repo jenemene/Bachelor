@@ -1,16 +1,11 @@
-import matplotlib
-from matplotlib.pylab import norm
-import matplotlib.pyplot as plt 
 import numpy as np
 import kap_soa as SOA
-from scipy.integrate import solve_ivp
+#from scipy.integrate import solve_ivp
 import kap_plotting as SOAplt
 import time
-import kap_initial_configs as iniconf
+import matplotlib.pyplot as plt
 
-def N_body_pendulum_closed(n, tspan, state0):
-    print("Starting simulation...")
-
+def N_body_pendulum_closed(n):
     def ODEfun(t,state,n,link):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
 
@@ -19,7 +14,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         beta = state[4*n:]
 
         #normalizing quartenions
-        theta = SOA.normalize_quaternions(theta) 
+        #theta = SOA.normalize_quaternions(theta) 
         
         #calculating theta_dot based on the derrivmap function
         theta_dot = np.zeros(len(theta))
@@ -31,7 +26,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         #Calculationg of generalized accelerations without any constraints (beta_dot_free) - this requires ATBI. 
         tau_vec = np.zeros_like(beta) #no external torques
 
-        A_f, V_f, beta_dot_f_list, tau_bar, D, G = SOA.ATBI_N_body_pendulum(state, tau_vec, n, link)
+        A_f,V_f, beta_dot_f_list,tau_bar,D,G = SOA.ATBI_N_body_pendulum(state, tau_vec, n, link)
 
         beta_dot_f = np.concatenate([b.flatten() for b in beta_dot_f_list[1:n+1]])
 
@@ -39,44 +34,62 @@ def N_body_pendulum_closed(n, tspan, state0):
 
         IR1 = SOA.get_rotation_tip_to_body_I(theta, n) #rotations to to ensure we are consistent with frames
         IRn = SOA.spatialrotfromquat(theta[4*(n-1):4*(n-1)+4])
-        #A_nd = np.concatenate([IRn @ A_f[n],IR1 @ link.RBT.T @ A_f[1]]) # Hvis denne bruges, så tjek her om den er i rigtig rækkefølge ift. Q og udledning.
+        #man kan lave en A_stacked her hvis man vil A_st = A_n, A_1. Det gider jeg sku ik
 
         #Setting up Q
         d = np.block([np.zeros((3,3)), np.eye(3)])
-        Q = np.block([d])
+        Q = np.block([d,-d])
 
 
         #need to calculate LAMDA (the matrix thing). For that we need elements of OMEGA
         omega_nn, omega_n1, omega_1n, omega_11= SOA.omega(theta,link,tau_bar,D,n)
 
-        #calculating block entires and rotating to frame I
-        Λ_11 =link.RBT.T @ omega_11 @ link.RBT
+        # Calculating block entries JEG ER MEGET I TVIL HER, MEN VED AT LAMBDA_11 er god nok :)
+        Λ_11 = link.RBT.T @ omega_11 @ link.RBT
+        Λ_nn = omega_nn
+        Λ_n1 = omega_n1 @ link.RBT
+        Λ_1n = link.RBT.T @ omega_1n
 
-        Λ_block =  IR1 @ Λ_11 @IR1.T
-        
+        # Rotate everything to the Inertial frame (has to be done on both sides)
+        Λ_11 = IR1 @ Λ_11 @ IR1.T
+        Λ_nn = IRn @ Λ_nn @ IRn.T
+        Λ_n1 = IR1 @ Λ_n1 @ IR1.T 
+        Λ_1n = IR1 @ Λ_1n @ IR1.T 
+
+        # Build the 12x12 block matrix
+        Λ_block = np.block([
+            [Λ_nn, Λ_n1],
+            [Λ_1n, Λ_11]
+        ])
+
         positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
 
         l_IO1 = positions[1]
-        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
-        
-        Φ =  l_IO1 + IR1[:3, :3]@link.l_hinge
-        Φ_dot = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
-        Φ_ddot = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
+        l_IOn = positions[n]
 
+        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
+    
+        Φ =  l_IOn - (l_IO1 + IR1[:3, :3]@link.l_hinge)
+        Φ_dot = IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
+        Φ_ddot =  IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
+        
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 25) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 20, 20) # Parametrene er vi slet ikke sikker på) AYO HVORFOR FUCK HEDDER DEN F
 
         #solving for lagrange multipliers
-        λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
+        λ = -np.linalg.solve((Q@Λ_block@Q.T),f) # Dimension: 3x1
 
 
-        #calculating f_c
-        f_c_closed_loop_const =  - Q.T@λ
+        #calculating f_c (skal ændred noget her)
+        f_c_closed_loop_const =  Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
-        f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const # SKAL VÆRE SÅDAN HER!!!
 
+        f_c[n] = IRn.T @ f_c_closed_loop_const[:6]
+        f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const[6:] # SKAL VÆRE SÅDAN HER!!!
+
+        print(t)
         #calculating beta_dot_delta
         beta_dot_delta_list = SOA.beta_dot_delta(theta,tau_bar,link,n,D,f_c,G) #returns a list
 
@@ -85,8 +98,6 @@ def N_body_pendulum_closed(n, tspan, state0):
         beta_dot = beta_dot_delta + beta_dot_f
 
         state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
-
-
 
         # ##-DEBUGGING ---------------------------------- 
         # if t < 1e-10:
@@ -103,82 +114,122 @@ def N_body_pendulum_closed(n, tspan, state0):
         #     print(f"beta_dot_f:     {beta_dot_f}")
         #     print(f"beta_dot_delta: {beta_dot_delta}")
         #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
+        return state_dot, V_f
         
 
-        # 1. Initialize 't_old' only on the very first call
-        if not hasattr(ODEfun, "t_old"):
-            ODEfun.t_old = -1 
-
-        t_now = int(t)
-
-        # 2. Check if the integer part of time has increased
-        if t_now > ODEfun.t_old:
-            print(t_now)
-            ODEfun.t_old = t_now # Update memory to current second
-
-        return state_dot #, V_f
     
     #setting up link
-    m = 2 #mass in kg
+    m = 20 #mass in kg
     l_hinge = np.array([0,0,0.2])
     link = SOA.SimpleLink(m,l_hinge)
     link.set_hingemap("spherical")
+
+    #initial config.
+    state0 = N4_stardown_initial_config(n)
     
-    #result, V_f = SOA.RK4_int_with_V(ODEfun, state0, tspan, n, link)
-    V_f = None # Placeholder for V_f, since we are not actually running the simulation here.
+    tspan = np.arange(0, 5, 0.001)
+    result, V_f = SOA.RK4_int_with_V(ODEfun, state0, tspan, n, link)
 
-    result = solve_ivp(
-        ODEfun,
-        t_span=(0, tspan[-1]), 
-        y0=state0, 
-        method='Radau',
-        t_eval=tspan,
-        args=(n, link),
-        rtol=1e-6,
-        atol=1e-9
-        )
+    return result,tspan,link, V_f
+
+
+#ONLY for 4 links right now due to initial config.
+def N4_initial_config(n):
+    # Calculate initial config for n bodies
+    # q0: All aligned and tilted to some side
+    qn = SOA.quatfromrev(np.pi/2, "y")
+    q_all = np.tile(qn, n)
     
-    return result, V_f, link
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    ωn = np.array([0,np.pi/2,0])
+    ω1 = np.zeros(3)
+    ω1_tiled = np.tile(ω1, n-1)
+    ω_all = np.concatenate([ω1_tiled, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
 
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_all, ω_all])
 
+    return state0
 
-### SIMULATION SETTINGS ###
+def N4_stardown_initial_config(n):
+    # Calculate initial config for n bodies
+    # q0: All aligned and tilted to some side
+    qn = SOA.quatfromrev(np.pi/4, "y")
+    q_other = SOA.quatfromrev(-np.pi/2, "y")
+    q_other_all = np.tile(q_other, n-1)
+    q_all = np.concatenate([q_other_all, qn])
+    
+    # Create zero vector for initial velocities  
+    ω = np.zeros(3)
+    ω_all = np.tile(ω, n)
+
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_all, ω_all])
+
+    return state0
+
+def N4_starup_initial_config(n):
+    # Calculate initial config for n bodies
+    # q0: All aligned and tilted to some side
+    qn = SOA.quatfromrev(3*np.pi/4, "y")
+    q_other = SOA.quatfromrev(np.pi/2, "y")
+    q_other_all = np.tile(q_other, n-1)
+    q_all = np.concatenate([q_other_all, qn])
+    
+    # Create zero vector for initial velocities  
+    ω = np.zeros(3)
+    ω_all = np.tile(ω, n)
+
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_all, ω_all])
+
+    return state0
+
+# ONLY for 2 links right now due to initial config.
+def N2_initial_config(n):
+    # Calculate initial config for n bodies
+    # q0: All aligned and tilted to some side
+    qn = SOA.quatfromrev(np.pi/2, "y")
+    q1 = SOA.quatfromrev(np.pi, "y")
+    q_all = np.concatenate([q1, qn])
+    
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    ωn = np.array([0,np.pi,0])
+    ω1 = np.zeros(3)
+    ω_all = np.concatenate([ω1, ωn])*0 # <------------------- Jeg har lige sat den til 0 :)
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_all, ω_all])
+
+    return state0
+
 n_bodies = 4
-tspan = np.arange(0, 2, 0.001)
-state0 = iniconf.N4_square(n_bodies)
 
-# Running and timing the simulation
 start = time.perf_counter()
-result, V_f, link = N_body_pendulum_closed(n_bodies, tspan, state0)
+
+result,tspan,link, V_f = N_body_pendulum_closed(n_bodies)
+
 end = time.perf_counter()
 
-# Extract the state matrix (Shape: [states, time_steps])
-y_out = result.y
-t_out = result.t
 
+# Extract the state matrix (Shape: [states, time_steps])
+y_out = result
+    
 # Clean up any microscopic quaternion drift in the final output
-for i in range(len(t_out)):
+for i in range(len(tspan)):
     # Ensure we are using your safe, non-mutating normalize_quaternions function
     y_out[:4*n_bodies, i] = SOA.normalize_quaternions(y_out[:4*n_bodies, i])
 
-# For animation
-step = 30 
 
-t_anim = t_out[::step]
+#til animation
+step = 5
+
+t_anim = tspan[::step]
 y_anim = y_out[:, ::step]
+
+SOAplt.animation_plot(result, tspan, link, config="closed")
 
 print("========================================================================================")
 print(f"Simulation time: {end - start:.4f} seconds")
-#print(f"Success: {result.success}")
-#print(f"Solver status: {result.message}")
-#print(f"Number of function evaluations: {result.nfev}")
 print("========================================================================================")
-
-l_vec = np.array([0,0,0.2])
-SOAplt.plot_initial_state(state0, link, config="closed")
-
-SOAplt.animate_n_bodies(t_anim, y_anim, l_vec, save_video=False)
-
-SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
 
 SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
