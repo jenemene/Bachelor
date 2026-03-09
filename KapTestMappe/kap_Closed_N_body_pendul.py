@@ -233,3 +233,5 @@ print(f"Simulation time: {end - start:.4f} seconds")
 print("========================================================================================")
 
 SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
+
+SOAplt.check_total_energy(result, V_f, tspan, link, n_bodies, "closed")
