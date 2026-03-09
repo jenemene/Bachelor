@@ -3,7 +3,8 @@ import numpy as np
 import matplotlib.animation as animation
 import kap_soa as SOA
 from matplotlib.animation import FuncAnimation
-from matplotlib.animation import FFMpegWriter # Add this import
+from matplotlib.animation import FFMpegWriter
+import matplotlib.ticker as ticker
 
 def spatial_plot(t, spatialquantity, type="spatialquantity",bodyno="body number"):
     # t: time vector as a np array of shape (N,)
@@ -255,6 +256,11 @@ def check_total_energy(result, V_values, tspan, link, n, config="openclosed"):
     plt.xlabel("Time [s]")
     plt.ylabel("Energy [J]")
     plt.grid(True, alpha=0.5)
+
+    # Force scientific notation for the y-axis
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
 
     plt.show()
 
