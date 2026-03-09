@@ -104,7 +104,8 @@ def plot_initial_state(state0, link, config="openclosed"):
     ax.set_xlim([-plotlim, plotlim])
     ax.set_ylim([-plotlim, plotlim])
     ax.set_zlim([-plotlim, plotlim])
-
+    ax.set(box_aspect=(1, 1, 1))
+    
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
@@ -215,6 +216,7 @@ def animation_plot(states, tspan, link, config="openclosed"):
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
+    ax.set(box_aspect=(1, 1, 1))
 
     # Initialize the line object that will be updated in the animation
     line, = ax.plot([], [], [], 'o-', lw=2)

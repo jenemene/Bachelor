@@ -129,7 +129,7 @@ def N_body_pendulum_closed(n):
     #initial config.
     state0 = N4_initial_config(n)
     
-    tspan = np.arange(0, 5, 0.001)
+    tspan = np.arange(0, 10, 0.001)
     result = SOA.RK4_int(ODEfun, state0, tspan, n,link)
 
     return result,tspan,link
