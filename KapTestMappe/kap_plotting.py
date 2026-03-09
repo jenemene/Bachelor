@@ -152,9 +152,9 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
         z0 = np.insert(z0, 0, 0)
 
     elif config == "closed_3":
-        assert n != 3, "Only for 3 bodies"
-        k = np.cos(np.pi/6)*link.l_com
-        zo = np.array([k, 2*k, k])
+        assert n == 3, "Only for 3 bodies"
+        k = np.cos(np.pi/6)*np.linalg.norm(link.l_com)
+        z0 = np.array([k, 2*k, k])
         z0 = np.insert(z0, 0, 0)
 
     for i in range(timesteps):
@@ -217,9 +217,9 @@ def check_total_energy(result, V_values, tspan, link, n, config="openclosed"):
         z0 = np.insert(z0, 0, 0)
 
     elif config == "closed_3":
-        assert n != 3, "Only for 3 bodies"
+        assert n == 3, "Only for 3 bodies"
         k = np.cos(np.pi/6)*link.l_com
-        zo = np.array([k, 2*k, k])
+        z0 = np.array([k, 2*k, k])
         z0 = np.insert(z0, 0, 0)
 
     for i in range(timesteps):
@@ -254,7 +254,6 @@ def check_total_energy(result, V_values, tspan, link, n, config="openclosed"):
     plt.title(f"CHange in energy of the System with n={n} bodies")
     plt.xlabel("Time [s]")
     plt.ylabel("Energy [J]")
-    plt.legend()
     plt.grid(True, alpha=0.5)
 
     plt.show()
