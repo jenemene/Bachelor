@@ -200,7 +200,7 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed", TE_onl
         plt.plot(tspan, TE_Delta, color='black')
 
         # Formatting
-        plt.title(f"Change in energy of the System with n={n} bodies")
+        plt.title(f"Energy of the System compared to initial energy with n={n} bodies")
         plt.xlabel("Time [s]")
         plt.ylabel("Energy [J]")
         plt.grid(True, alpha=0.5)
