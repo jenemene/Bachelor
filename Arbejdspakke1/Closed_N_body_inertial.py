@@ -2,11 +2,11 @@ import matplotlib
 from matplotlib.pylab import norm
 import matplotlib.pyplot as plt 
 import numpy as np
-import soa as SOA
 from scipy.integrate import solve_ivp
-import plotting as SOAplt
+from utils import soa as SOA
+from utils import plotting as SOAplt
 import time
-import initial_configs as iniconf
+from initial_configs import initial_configs_closed as iniconf
 
 def N_body_pendulum_closed(n, tspan, state0):
     print("Starting simulation...")
@@ -30,7 +30,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         #Calculationg of generalized accelerations without any constraints (beta_dot_free) - this requires ATBI. 
         tau_vec = np.zeros_like(beta) #no external torques
 
-        A_f, V_f, beta_dot_f_list, tau_bar, D, G = SOA.ATBI_N_body_pendulum(state, tau_vec, n, link)
+        A_f, V_f, beta_dot_f_list, tau_bar, D, G = SOA.ATBI(state, tau_vec, n, link)
 
         beta_dot_f = np.concatenate([b.flatten() for b in beta_dot_f_list[1:n+1]])
 
@@ -65,7 +65,7 @@ def N_body_pendulum_closed(n, tspan, state0):
 
         #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 25) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 300) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -133,9 +133,9 @@ def N_body_pendulum_closed(n, tspan, state0):
 
 
 ### SIMULATION SETTINGS ###
-n_bodies = 4
-tspan = np.arange(0, 10, 0.001)
-state0 = iniconf.N4_square(n_bodies)
+n_bodies = 3
+tspan = np.arange(0, 5, 0.001)
+state0 = iniconf.N3_triangle(n_bodies)
 
 # Running and timing the simulation
 start = time.perf_counter()
@@ -163,9 +163,8 @@ print(f"Simulation time: {end - start:.4f} seconds")
 #print(f"Number of function evaluations: {result.nfev}")
 print("========================================================================================")
 
-l_vec = np.array([0,0,0.2])
-SOAplt.plot_initial_state(state0, l_vec)
-SOAplt.animate_n_bodies(t_anim, y_anim, l_vec, save_video=False)
+SOAplt.plot_initial_state(state0, link,"closed")
+SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
 
 #SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
 
