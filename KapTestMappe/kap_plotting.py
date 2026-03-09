@@ -252,7 +252,7 @@ def check_total_energy(result, V_values, tspan, link, n, config="openclosed"):
     plt.plot(tspan, TE_Delta, color='black')
 
     # Formatting
-    plt.title(f"CHange in energy of the System with n={n} bodies")
+    plt.title(f"Change in energy of the System with n={n} bodies")
     plt.xlabel("Time [s]")
     plt.ylabel("Energy [J]")
     plt.grid(True, alpha=0.5)

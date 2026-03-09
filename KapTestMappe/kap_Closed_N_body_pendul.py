@@ -63,9 +63,9 @@ def N_body_pendulum_closed(n, tspan, state0):
         Φ_dot = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
         Φ_ddot = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
 
-        #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
+        print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.8f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 300) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 2000, 2000) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -105,17 +105,8 @@ def N_body_pendulum_closed(n, tspan, state0):
         #     print(f"sammenlagt acceleration:{beta_dot_f+beta_dot_delta}")
         
 
-        # 1. Initialize 't_old' only on the very first call
-        if not hasattr(ODEfun, "t_old"):
-            ODEfun.t_old = -1 
-
-        t_now = int(t)
-
-        # 2. Check if the integer part of time has increased
-        if t_now > ODEfun.t_old:
-            print(t_now)
-            ODEfun.t_old = t_now # Update memory to current second
-        
+        if t % 1 == 0: # Print every 1 second
+            print(t)
         return state_dot, V_f
     
     #setting up link
@@ -143,7 +134,7 @@ def N_body_pendulum_closed(n, tspan, state0):
 
 ### SIMULATION SETTINGS ###
 n_bodies = 3
-tspan = np.arange(0, 5, 0.001)
+tspan = np.arange(0, 120, 0.001)
 state0 = iniconf.N3_triangle(n_bodies)
 
 # Running and timing the simulation
@@ -175,6 +166,6 @@ print("=========================================================================
 SOAplt.plot_initial_state(state0, link,"closed")
 SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
 
-SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed_3")
+SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
+SOAplt.check_total_energy(result,V_f,tspan,link,n_bodies,"closed")
 
-SOAplt.check_total_energy(result, V_f, tspan, link, n_bodies, "closed_3")

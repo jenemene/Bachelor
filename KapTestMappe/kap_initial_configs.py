@@ -20,7 +20,7 @@ def N4_square(n):
 
 def N3_triangle(n):
     # Calculate initial config for n bodies
-    q3 = SOA.quatfromrev(np.pi, "y")
+    q3 = SOA.quatfromrev(0*np.pi, "y")
     q2 = SOA.quatfromrev(2*np.pi/3, "y")
     q1 = SOA.quatfromrev(2*np.pi/3, "y")
     q_all = np.concatenate([q1, q2, q3])
