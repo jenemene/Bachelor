@@ -1,16 +1,15 @@
-import matplotlib
-from matplotlib.pylab import norm
-import matplotlib.pyplot as plt 
 import numpy as np
-from scipy.integrate import solve_ivp
 from utils import soa as SOA
 from utils import plotting as SOAplt
 import time
 from initial_configs import initial_configs_closed as iniconf
 
-def N_body_pendulum_closed(n, tspan, state0):
-    print("Starting simulation...")
-    def ODEfun(t,state,n,link):
+def N_body_pendulum_closed(n, link, tspan, state0, BG_params):
+    start = time.perf_counter()
+    print("--- Simulation started ---")
+    print(f"Progress (until {tspan[-1]:.0f}):")
+
+    def ODEfun(t, state, n, link, BG_params):
         #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
 
         #unpacking state
@@ -41,7 +40,7 @@ def N_body_pendulum_closed(n, tspan, state0):
         #A_nd = np.concatenate([IRn @ A_f[n],IR1 @ link.RBT.T @ A_f[1]]) # Hvis denne bruges, så tjek her om den er i rigtig rækkefølge ift. Q og udledning.
 
         
-#Setting up Q
+        #Setting up Q
         d = np.block([np.zeros((3,3)), np.eye(3)])
         Q = np.block([d,-d])
 
@@ -77,20 +76,20 @@ def N_body_pendulum_closed(n, tspan, state0):
         Φ =  l_IOn - (l_IO1 + IR1[:3, :3]@link.l_hinge)
         Φ_dot = IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
         Φ_ddot =  IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
-        
-        
-        #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 2000, 2500) # Parametrene er vi slet ikke sikker på) AYO HVORFOR FUCK HEDDER DEN F
+        #---------------------------------PRINTING HERE---------------------------------------#
+        print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.8f}")
+
+        # Baumgarte stabilization
+        α, β = BG_params
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β) # Parametrene er vi slet ikke sikker på) AYO HVORFOR FUCK HEDDER DEN F
 
         #solving for lagrange multipliers
         λ = -np.linalg.solve((Q@Λ_block@Q.T),f) # Dimension: 3x1
 
-
         #calculating f_c
         f_c_closed_loop_const =  Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
-
 
         f_c[n] = IRn.T @ f_c_closed_loop_const[:6]
         f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const[6:] 
@@ -104,67 +103,45 @@ def N_body_pendulum_closed(n, tspan, state0):
 
         state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
 
-        print(t)
-
         return state_dot, V_f
     
-    #setting up link
-    m = 20 #mass in kg
-    l_hinge = np.array([0,0,0.2])
-    link = SOA.SimpleLink(m,l_hinge)
-    link.set_hingemap("spherical")
-    
-    result, V_f = SOA.RK4_int_with_V(ODEfun, state0, tspan, n, link)
-    
-    # result = solve_ivp(
-    #     ODEfun,
-    #     t_span=(0, tspan[-1]), 
-    #     y0=state0, 
-    #     method='Radau',
-    #     t_eval=tspan,
-    #     args=(n, link),
-    #     rtol=1e-6,
-    #     atol=1e-9
-    #     )
-    
-    return result, V_f, link
+    result, V_values = SOA.RK4_int_with_V_BG(ODEfun, state0, tspan, n, link, BG_params)
 
+    end = time.perf_counter()
+    print(f"Integration time: {end - start:.2f} seconds")
+    print("--- Simulation finished ---")
 
+    return result, V_values, link
+
+### LINK SETUP ###
+m = 20
+l_hinge = np.array([0,0,0.2])
+link = SOA.SimpleLink(m, l_hinge)
+link.set_hingemap("spherical")
 
 ### SIMULATION SETTINGS ###
 n_bodies = 3
-tspan = np.arange(0, 5, 0.001)
+simulation_length = 5
+dt = 0.001
 state0 = iniconf.N3_triangle(n_bodies)
 
-# Running and timing the simulation
-start = time.perf_counter()
-result, V_f, link = N_body_pendulum_closed(n_bodies, tspan, state0)
-end = time.perf_counter()
+### PLOT INITIAL STATE ###
+SOAplt.plot_initial_state(state0, link, config="closed")
 
-# Extract the state matrix (Shape: [states, time_steps])
-y_out = result
+### BAUMGARTE PARAMETERS ###
+α = 2000
+β = 2500
+BG_params = np.array([α, β])
 
-# Clean up any microscopic quaternion drift in the final output
-for i in range(len(tspan)):
-    # Ensure we are using your safe, non-mutating normalize_quaternions function
-    y_out[:4*n_bodies, i] = SOA.normalize_quaternions(y_out[:4*n_bodies, i])
+### RUN SIMULATION ###
+tspan = np.arange(0, simulation_length+dt, dt)
+states, V_values, link = N_body_pendulum_closed(n_bodies, link, tspan, state0, BG_params)
 
-# For animation
-step = 30 
+### ANIMATION ###
+SOAplt.animation_plot(states, tspan, link, config="closed", step=30)
 
-t_anim = tspan[::step]
-y_anim = y_out[:, ::step]
+### ENERGY CHECK ###
+SOAplt.check_energies(states, V_values, tspan, link, n_bodies, "closed_3", TE_only=False)
+SOAplt.check_energies(states, V_values, tspan, link, n_bodies, "closed_3", TE_only=True)
 
-print("========================================================================================")
-print(f"Simulation time: {end - start:.4f} seconds")
-#print(f"Success: {result.success}")
-#print(f"Solver status: {result.message}")
-#print(f"Number of function evaluations: {result.nfev}")
-print("========================================================================================")
-
-SOAplt.plot_initial_state(state0, link,"closed")
-SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
-
-SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed_3")
-SOAplt.check_total_energy(result,V_f,tspan,link,n_bodies,"closed_3")
 

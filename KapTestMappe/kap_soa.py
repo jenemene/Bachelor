@@ -344,7 +344,7 @@ def omega(theta_vec,link,tau_bar,D,n):
     omega_1n = omega_n1.T
     omega_11 = gamma[1]
 
-    return omega_nn, omega_n1, omega_1n,omega_11
+    return omega_nn, omega_n1, omega_1n, omega_11
 
 def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
 

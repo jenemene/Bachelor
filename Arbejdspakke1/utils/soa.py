@@ -223,7 +223,7 @@ def ATBI(state,tau_vec,n,link):
             # ... unpacking idx ...
             
             # Calculate damping torque (viscous friction)
-            b = 0.0 # Damping coefficient
+            b = 0 # Damping coefficient
             damping_tau = -b * beta[i]
             
             # Add it to any other external torques (currently zero)
@@ -589,3 +589,35 @@ def RK4_int_with_V(odefun, initial_cond, time_vec, n,link):
 
     return Y, V_storage
     
+def RK4_int_with_V_BG(odefun, initial_cond, time_vec, n, link, BG_params):
+    time_vec = np.asarray(time_vec)
+    y0 = np.asarray(initial_cond).reshape(-1)
+
+    dt = time_vec[1] - time_vec[0]
+    N  = len(time_vec)
+    m  = len(y0)
+
+    Y = np.zeros((m, N))
+    Y[:, 0] = y0
+
+    #for storing spatial velcoities
+    V_storage = [None]*N
+
+    # initial V - spatial vel
+
+    for i in range(N - 1):
+        t = time_vec[i]
+        y = Y[:, i]
+
+        k1,V_val = odefun(t, y, n, link, BG_params)
+        k2,_ = odefun(t + dt/2.0, y + dt/2.0 * k1, n, link, BG_params)
+        k3,_ = odefun(t + dt/2.0, y + dt/2.0 * k2, n, link, BG_params)
+        k4,_ = odefun(t + dt, y + dt * k3, n, link, BG_params)
+
+        Y[:, i+1] = y + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
+        V_storage[i] = V_val
+
+    #filling in last timestep 
+    _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link, BG_params)
+
+    return Y, V_storage

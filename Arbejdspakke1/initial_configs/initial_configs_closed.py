@@ -34,9 +34,27 @@ def N3_triangle(n):
 
     return state0
 
+def N5_triangle(n):
+    # Calculate initial config for n bodies
+    q5 = SOA.quatfromrev(np.pi, "y")
+    q4 = SOA.quatfromrev(0, "y")
+    q3 = SOA.quatfromrev(np.pi-1.318, "y")
+    q2 = SOA.quatfromrev(np.pi-1.318, "y")
+    q1 = SOA.quatfromrev(0, "y")
+    q_all = np.concatenate([q1, q2, q3, q4, q5])
+
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    ω = np.zeros(3)
+    ω_all = np.tile(ω, n)
+
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_all, ω_all])
+
+    return state0
+
 def N9_triangle(n):
     # Calculate initial config for n bodies
-    q9 = SOA.quatfromrev(1*np.pi/6, "y")
+    q9 = SOA.quatfromrev(np.pi, "y")
     q8 = SOA.quatfromrev(0, "y")
     q7 = SOA.quatfromrev(0, "y")
     q6 = SOA.quatfromrev(2*np.pi/3, "y")
