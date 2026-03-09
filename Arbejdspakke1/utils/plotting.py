@@ -145,10 +145,17 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
         z0 = np.arange(n) * step + start
         z0 = np.flip(z0) #Make it compatible with our convention -> body n connected to inertial.
         z0 = np.insert(z0, 0, 0)
+
     elif config == "closed":
         assert n % 2 == 0, "check_energies function only supports closed configuration with even number of bodies"
         ztemp = np.arange(n/2) * step + start
         z0 = np.concatenate([ztemp, np.flip(ztemp)]) # Mirror the z-positions for the second half of the system
+        z0 = np.insert(z0, 0, 0)
+
+    elif config == "closed_3":
+        #assert n != 3, "Only for 3 bodies"
+        k = np.cos(np.pi/6)*link.l_com
+        zo = np.array([k, 2*k, k])
         z0 = np.insert(z0, 0, 0)
 
     for i in range(timesteps):
@@ -188,6 +195,71 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed"):
     plt.grid(True, alpha=0.5)
 
     plt.show()
+
+def check_total_energy(result, V_values, tspan, link, n, config="openclosed"):
+    timesteps = len(tspan)
+    KE = np.zeros(timesteps)
+    PE = np.zeros(timesteps)
+    TE = np.zeros(timesteps)
+
+    start = 0.1
+    step = 0.2
+    g = 9.81
+
+    if config == "open":
+        z0 = np.arange(n) * step + start
+        z0 = np.flip(z0) #Make it compatible with our convention -> body n connected to inertial.
+        z0 = np.insert(z0, 0, 0)
+
+    elif config == "closed":
+        assert n % 2 == 0, "check_energies function only supports closed configuration with even number of bodies"
+        ztemp = np.arange(n/2) * step + start
+        z0 = np.concatenate([ztemp, np.flip(ztemp)]) # Mirror the z-positions for the second half of the system
+        z0 = np.insert(z0, 0, 0)
+
+    elif config == "closed_3":
+        #assert n != 3, "Only for 3 bodies"
+        k = np.cos(np.pi/6)*link.l_com
+        zo = np.array([k, 2*k, k])
+        z0 = np.insert(z0, 0, 0)
+
+    for i in range(timesteps):
+        KE_t = 0.0
+        PE_t = 0.0
+        com_pos = SOA.compute_com_pos_in_inertial_frame(result[:,i], link.l_hinge, n)
+
+        for k in range(1,n+1):            
+            # Kinetic energy
+            Vk = V_values[i][k] 
+            KE_link = Vk @ link.M @ Vk
+            KE_t += 0.5*KE_link
+            
+            # Potential energy
+            zk = com_pos[k][-1] # z-pos of current body k
+            zk_pot = zk + z0[k] # potential height of current body
+
+            PE_link = link.m*g*zk_pot
+            PE_t += PE_link
+
+        KE[i] = KE_t
+        PE[i] = PE_t
+        TE[i] = KE_t + PE_t
+
+    TE_Delta = TE - TE[0] # Normalize total energy to start at 0 for easier comparison of drift over time
+
+    plt.figure(figsize=(10, 6))
+
+    plt.plot(tspan, TE_Delta, color='black')
+
+    # Formatting
+    plt.title(f"CHange in energy of the System with n={n} bodies")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Energy [J]")
+    plt.legend()
+    plt.grid(True, alpha=0.5)
+
+    plt.show()
+
 
 def animation_plot(states, tspan, link, config="openclosed"):
     # Number of bodies

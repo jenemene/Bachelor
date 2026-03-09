@@ -63,9 +63,9 @@ def N_body_pendulum_closed(n, tspan, state0):
         Φ_dot = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
         Φ_ddot = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
 
-        #print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.6f}")
+        print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.8f}")
 
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 100, 300) # Parametrene er vi slet ikke sikker på)
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, 2500, 2000) # Parametrene er vi slet ikke sikker på)
 
         #solving for lagrange multipliers
         λ = np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
@@ -166,5 +166,6 @@ print("=========================================================================
 SOAplt.plot_initial_state(state0, link,"closed")
 SOAplt.animation_plot(y_anim, t_anim, link, config="closed")
 
-#SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed")
+#SOAplt.check_energies(result, V_f, tspan, link, n_bodies, "closed_3")
+#SOAplt.check_total_energy(result,V_f,tspan,link,n_bodies,"closed_3")
 
