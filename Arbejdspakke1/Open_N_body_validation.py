@@ -67,7 +67,7 @@ link.set_hingemap("spherical")
 ### SIMULATION SETTINGS ###
 n_bodies = 2
 simulation_length = 5
-dt = 0.01
+dt = 0.005
 state0 = iniconf.N_horizontal(n_bodies)
 
 ### RUN SIMULATION ###
@@ -78,4 +78,4 @@ Y, V_values, link = N_body_pendulum(n_bodies, link, tspan, state0)
 anim = SOAplt.animation_plot(Y, tspan, link, "open", step=1)
 
 ### ENERGY CHECK ###
-SOAplt.check_energies(Y, V_values, tspan, link, n_bodies, "open", TE_only=False)
+SOAplt.check_energies(Y, V_values, tspan, link, n_bodies, "open", TE_only=True)
