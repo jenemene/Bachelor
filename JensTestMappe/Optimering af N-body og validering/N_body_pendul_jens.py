@@ -8,8 +8,8 @@ import time
 
 def N_body_pendulum(n):
     #setting up link
-    m = 200
-    l_hinge = np.array([0,0,0.5])
+    m = 2
+    l_hinge = np.array([0,0,0.2])
     link = SOA.SimpleLink(m, l_hinge)
     link.set_hingemap("spherical")
 
@@ -190,7 +190,7 @@ def initial_config(n):
     return state0
 
 
-n_bodies = 5
+n_bodies = 2
 
 start = time.perf_counter()
 
