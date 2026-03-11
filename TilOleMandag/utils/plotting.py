@@ -294,3 +294,88 @@ def animation_plot(states, tspan, link, config="openclosed", step=1):
     ax.view_init(elev=0, azim=-90, roll=0)
     plt.show()
     return ani
+
+def animation_plot_moving_base(states, tspan, link, config="openclosed", step=1):
+    tspan = tspan[::step]
+    states = states[:, ::step]
+
+    # Number of bodies
+    n_bodies = int(states.shape[0] / 7)
+    N = states.shape[1]
+
+    # Driver parameters (MUST match 'R' and 'w' in your ODEfun)
+    R_drive = 1
+    Omega_drive = 1.5
+
+    # Setting up the figure and 3D axis
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Defining plotlim
+    plotlim = R_drive + (n_bodies + 1) * np.linalg.norm(link.l_hinge)
+    
+    # Set plot limits and labels
+    ax.set_xlim([-plotlim, plotlim])
+    ax.set_ylim([-plotlim, plotlim])
+    ax.set_zlim([-plotlim, plotlim])
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set(box_aspect=(1, 1, 1))
+
+    # 1. NEW: Draw the circular path in the YZ plane!
+    theta_circle = np.linspace(0, 2*np.pi, 100)
+    ax.plot(np.zeros_like(theta_circle), 
+            R_drive * np.cos(theta_circle), 
+            R_drive * np.sin(theta_circle), 
+            'k--', alpha=0.3, label="Base Path")
+
+    # Initialize the line object
+    line, = ax.plot([], [], [], 'o-', lw=3, markersize=8)
+
+    # Computes absolute positions
+    def compute_positions(state_k, t):
+        # Get relative positions
+        positions = SOA.compute_pos_in_inertial_frame(state_k[:4*n_bodies], link.l_hinge, n_bodies)
+        
+        # Insert tip position
+        R6_tip2I = SOA.get_rotation_tip_to_body_I(state_k[:4*n_bodies], n_bodies)
+        R3_tip2I = R6_tip2I[:3,:3]
+        tip_pos = (positions[1] + R3_tip2I @ link.l_hinge).flatten()
+        positions[0] = tip_pos
+        
+        pos_array = np.array(positions) 
+        
+        # 2. NEW: Shift the base in the YZ plane to match your V and A math!
+        base_x = 0.0
+        base_y = R_drive * np.cos(Omega_drive * t)
+        base_z = R_drive * np.sin(Omega_drive * t)
+        base_offset = np.array([base_x, base_y, base_z])
+        
+        # Shift all coordinates by the base offset
+        pos_array += base_offset
+        
+        return pos_array
+    
+    # Update function
+    def update(frame):
+        state_k = states[:, frame]
+        t = tspan[frame]
+        
+        positions = compute_positions(state_k, t)
+        
+        line.set_data(positions[:, 0], positions[:, 1])
+        line.set_3d_properties(positions[:, 2])
+        ax.set_title(f"t = {t:.3f} s")
+
+    dt = np.mean(np.diff(tspan))
+    interval = dt * 1000 
+    ani = FuncAnimation(
+        fig, update, frames=N, interval=interval, blit=False
+    )
+    
+    # 3. NEW: Point the camera directly at the YZ plane (elevation 15, azimuth 0)
+    ax.view_init(elev=15, azim=0, roll=0) 
+    plt.legend()
+    plt.show()
+    return ani

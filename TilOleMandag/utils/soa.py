@@ -178,7 +178,7 @@ def normalize_quaternions(q):
     q_reshaped /= norms
     return q_reshaped.reshape(-1)
         
-def ATBI(state,tau_vec,n,link):
+def ATBI(state,tau_vec,n,link,t):
         #inputs
         #state: np.array on form [theta_dot, beta]
         #tau_vec: generalized forces as np.array
@@ -246,8 +246,11 @@ def ATBI(state,tau_vec,n,link):
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
         tau_bar[0] = P_plus[0]
-        A[n+1] = np.array([0, 0, 0, 0, 0, 9.81]) # Psudo gravity in the last frame, which is the inertial frame
-        V[n+1] = np.zeros((6,))
+
+        w = 1.5
+        R = 1
+        A[n+1] = np.array([0, 0, 0,0, -R*w**2*np.cos(w*t), -R*w**2*np.sin(w*t)+9.81]) # Psudo gravity in the last frame, which is the inertial frame
+        V[n+1] = np.array([0,0,0,0,-R*w*np.sin(w*t), R*w*np.cos(w*t)]) # Psudo velocity in the last frame, which is the inertial frame
 
         #kinematics scatter
 
