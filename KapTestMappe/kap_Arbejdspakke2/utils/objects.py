@@ -134,7 +134,23 @@ class MultiBodySystem:
             
         return theta_list, beta_list
 
-    def get_state_dot(self,t,state,V_base,A_base):
+    def get_state_dot_open(self,t,state,V_base,A_base):
+        theta_list, beta_list = self.unpack_state(state)
+
+        theta_dot_list = []
+
+        tau_list = [np.zeros(link.joint.nw) for link in self.links] #theta
+
+        for i in range(len(self.links)):
+            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i])
+            theta_dot_list.append(theta_dot)
+
+        beta_dot_list, V, _,_,_,_ = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)  
+
+        state_dot = np.concatenate(theta_dot_list + beta_dot_list)
+        return state_dot, V
+
+    def get_state_dot_closed(self,t,state,V_base,A_base):
         theta_list, beta_list = self.unpack_state(state)
 
         theta_dot_list = []
@@ -145,9 +161,22 @@ class MultiBodySystem:
             theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i])
             theta_dot_list.append(theta_dot)
 
-        beta_dot_list, V = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)  
+        beta_dot_f_list, V, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)  
 
-        state_dot = np.concatenate(theta_dot_list + beta_dot_list)
+        beta_dot_f = np.concatenate([b.flatten() for b in beta_dot_f_list[1:n+1]])
+
+        IR1 = SOA.get_rotation_tip_to_body_I(theta_list, n) #rotations to to ensure we are consistent with frames
+        IRn = SOA.spatialrotfromquat(self.links[-1].joint.get_spatial_rotation(theta_list[-1]))
+
+        #Setting up Q
+        d = np.block([np.zeros((3,3)), np.eye(3)])
+        Q = np.block([d,-d])
+
+        #need to calculate LAMDA (the matrix thing). For that we need elements of OMEGA
+        omega_nn, omega_n1, omega_1n, omega_11= SOA.omega(theta,link,tau_bar,D,n)
+
+        
+        state_dot = np.concatenate(theta_dot_list + beta_dot)
         return state_dot, V
         
     def run_ATBI(self,theta_list,beta_list,tau_list,V_base,A_base):
@@ -221,7 +250,7 @@ class MultiBodySystem:
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
 
-        return beta_dot[1:n+1], V
+        return beta_dot[1:n+1], V, A, tau_bar, D, G
     
     def simulate_open(self,tspan,V_base,A_base):
         print("simulation started")
@@ -237,7 +266,7 @@ class MultiBodySystem:
         Y[:,0] = state0
 
         def ODEfun(tspan,state,A_base,V_base):
-            return self.get_state_dot(t,state,V_base,A_base)
+            return self.get_state_dot_open(t,state,V_base,A_base)
         
         #RK4 integration loop
         for i in range(nt-1):
@@ -258,6 +287,41 @@ class MultiBodySystem:
         self.tspan = tspan
         print("simulation finished")
     
+    def simulate_closed(self,tspan,V_base,A_base):
+        print("simulation started")
+
+        #initial configuration
+        state0 = self.get_initial_state()
+        dt = tspan[1] - tspan[0]
+        
+        nt = len(tspan)
+        nq = len(state0)
+
+        Y = np.zeros((nq,nt))
+        Y[:,0] = state0
+
+        def ODEfun(tspan,state,A_base,V_base,BG_params):
+            return self.get_state_dot(t,state,V_base,A_base)
+        
+        #RK4 integration loop
+        for i in range(nt-1):
+            t = tspan[i]
+            y = Y[:,i]
+
+            k1,_  = ODEfun(t, y, A_base, V_base)
+            k2,_  = ODEfun(t + dt/2, y + dt/2 * k1, A_base, V_base)
+            k3,_  = ODEfun(t + dt/2.0,y + dt/2.0 * k2,A_base,V_base)
+            k4,_ =  ODEfun(t + dt,y + dt * k3,A_base,V_base)
+
+            Y[:,i+1] = y + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
+
+            if t%1 == 0: #print every second
+                print(f"t = {t:.2f} s")
+
+        self.result = Y
+        self.tspan = tspan
+        print("simulation finished")
+
     def plot_gen_velocities(self):
         #renskrevet af gemini, havde problemer med nogle axer ifh til free joint plot
 
@@ -447,7 +511,3 @@ class MultiBodySystem:
 
         return fig, ax
 
-
-
-
-        
