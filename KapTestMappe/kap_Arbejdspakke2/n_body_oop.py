@@ -11,10 +11,10 @@ joint1 = ob.RevoluteJoint(axis="y")
 joint2 = ob.RevoluteJoint(axis="x")
 joint3 = ob.RevoluteJoint(axis="y")
 
-#intialziing such that pendulum is hanging to the right
+#initial conditions
 joint3.q_init = np.array([np.pi/2])
-joint2.q_init = np.array([np.pi/2])
-joint1.q_init = np.array([np.pi/2])
+joint2.q_init = np.array([0*np.pi/2])
+joint1.q_init = np.array([0*np.pi/2])
 
 #defining link
 link1 = ob.Link(mass=2.0, l_hinge=np.array([0, 0, 0.2]), joint=joint1)

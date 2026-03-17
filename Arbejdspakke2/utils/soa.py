@@ -360,26 +360,7 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
 
     return beta_dot_delta
 
-def get_rotation_tip_to_body_I(theta_vec, n):
-    # Args:
-    # theta_vec: Flattened state vector of quaternions
-    # n: number of bodies (where body 1 is tip, body n is connected to base)
-    
-    # Returns:
-    # R_total: 6x6 Rotation matrix representing rotation of Body 1 w.r.t Body n
-
-    # --- Unpacking generalized coordinates ---
-    theta = [None]*(n+2)
-    theta[0] = np.zeros(4) # Dummy
-    theta[n+1] = np.zeros(4) # Dummy
-
-    # Unpacking interior 
-    for i in range(1, n+1):
-        idxq = 4*(i-1)
-        theta[i] = theta_vec[idxq:idxq+4]
-    
-    # --- Calculation of Cumulative Rotation ---
-    
+def get_rotation_tip_to_body_I(theta_list, links, n):   
     # Initialize total rotation as Identity (Body 1 in Body 1 frame)
     R_total = np.eye(3) 
 
@@ -387,9 +368,9 @@ def get_rotation_tip_to_body_I(theta_vec, n):
     # We use theta[k] which describes orientation of k relative to k+1 (parent)
     # Chain: R_n1 = R_n,n-1 @ ... @ R_3,2 @ R_2,1
     
-    for k in range(1, n+1): 
+    for k in range(0, n): 
         # Calculate rotation R_{k+1, k} (Parent-from-Child)
-        pRc = rotfromquat(theta[k]) 
+        pRc = links[k].joint.get_spatial_rotation(theta_list[k])[:3, :3]
         
         # Accumulate: New_Total = Current_Link_Rotation @ Old_Total
         # This builds the chain: R_{k+1, 1} = R_{k+1, k} @ R_{k, 1}
@@ -400,26 +381,21 @@ def get_rotation_tip_to_body_I(theta_vec, n):
 
     return R
 
-def compute_pos_in_inertial_frame(theta_vec, l_vec, n):
-
-    theta = [None]*(n+1)
-
-    #unpacking interior 
-    for i in range(1, n+1):
-        idxq = 4*(i-1)
-        theta[i] = theta_vec[idxq:idxq+4]
+def compute_pos_in_inertial_frame(theta_list, links, n):
 
     positions = [None]*(n+1)
 
     #BC for position of base body
     positions[n] = np.zeros(3)
 
-    R_cumulative = rotfromquat(theta[n]) #initial rotation from body n to inertial frame
+    R_cumulative = links[n-1].joint.get_spatial_rotation(theta_list[n-1]) #initial rotation from body n to inertial frame
+    R_cumulative = R_cumulative[:3, :3]
 
     for i in range(n-1,0,-1):        
-        pRc = rotfromquat(theta[i])
+        pRc = links[i-1].joint.get_spatial_rotation(theta_list[i-1])
+        pRc = pRc[:3, :3]
 
-        positions[i] = positions[i+1] + R_cumulative @ l_vec
+        positions[i] = positions[i+1] + R_cumulative @ links[i-1].l_hinge
 
         R_cumulative = R_cumulative @ pRc
 
@@ -592,7 +568,6 @@ def RK4_int_with_V_BG(odefun, initial_cond, time_vec, n, link, BG_params):
     _,V_storage[N-1] = odefun(time_vec[N-1], Y[:, N-1], n, link, BG_params)
 
     return Y, V_storage
-
 
 class SimpleLink:
     def __init__(self,m,l_hinge):
