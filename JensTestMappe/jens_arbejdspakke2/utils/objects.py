@@ -188,8 +188,8 @@ class MultiBodySystem:
         Λ_1n = IR1 @ (link1.RBT.T @ omega_1n) @ IR1.T
 
         Λ_block = np.block([
-            [Λ_nn, Λ_n1.T],
-            [Λ_1n.T, Λ_11]
+            [Λ_nn, Λ_n1],
+            [Λ_1n, Λ_11]
         ])
 
         positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
