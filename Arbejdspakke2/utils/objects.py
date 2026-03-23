@@ -102,7 +102,7 @@ class MultiBodySystem:
         self.tspan = None
 
     def add_link(self,link):
-        self.links.append(link)
+        self.links.insert(0,link)
         self.total_nq += link.joint.nq
         self.total_nw += link.joint.nw
     
@@ -213,7 +213,7 @@ class MultiBodySystem:
         λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
 
         #calculating f_c
-        f_c_closed_loop_const =  -Q.T@λ
+        f_c_closed_loop_const =  Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
         #constraints and Q are ordered [tip, base]
