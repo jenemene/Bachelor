@@ -330,7 +330,7 @@ class MultiBodySystem:
         #ROTATIONS AND CONSTRAINT SETUPS
         link1 = self.links[0]
 
-        IR1 = link1.joint.get_spatial_rotation(theta_list[0])
+        IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
 
         Q = np.block([np.zeros((3,3)), np.eye(3)])
 
@@ -346,7 +346,7 @@ class MultiBodySystem:
         
         l_IO1 = positions[1]
         IR1_3 = IR1[:3,:3]
-        ω_tilde_I = IR1_3 @ SOA.skewfromvec(V_f[1][:3])
+        ω_tilde_I = SOA.skewfromvec(IR1_3 @ V_f[1][:3])
 
         ω = np.pi
 
@@ -354,9 +354,9 @@ class MultiBodySystem:
         #f_d_driver = np.array([-0.1*ω*np.sin(ω*t), 0, 0])
         #f_dd_driver = np.array([-0.1*ω**2*np.cos(ω*t), 0, 0])
 
-        f_driver = np.array([0.2,0,-0.2])
-        f_d_driver = np.array([0,0,0])
-        f_dd_driver = np.array([0,0,0])
+        f_driver = np.array([0.2 + 0.1*np.sin(ω*t),0,0])
+        f_d_driver = np.array([0.2 - 0.1*ω*np.cos(ω*t),0,0])
+        f_dd_driver = np.array([0.2 - 0.1*ω**2*np.sin(ω*t),0,0])
 
         Φ = l_IO1 + IR1_3@link1.l_hinge - f_driver
         Φ_dot = IR1_3@V_f[1][3:] + ω_tilde_I@IR1_3@link1.l_hinge - f_d_driver
@@ -366,8 +366,12 @@ class MultiBodySystem:
         α, β = BG_params
         f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β)
 
+        #print(f"t={t:.3f}   l_IO1={l_IO1}   IR1_3@link1.l_hinge={IR1_3@link1.l_hinge}")
+        print(f"t={t:.3f}   |Φ| = {np.linalg.norm(Φ):.8f}")
+
         #solving for lagrange multipliers
         λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
+        #λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
 
         #calculating f_c
         f_c_closed_loop_const = -Q.T @ λ
