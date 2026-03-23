@@ -386,7 +386,7 @@ def compute_pos_in_inertial_frame(theta_list, links, n):
     positions = [None]*(n+1)
 
     #BC for position of base body
-    positions[n] = np.zeros(3)
+    positions[n] = links[n-1].joint.get_translation(theta_list[n-1])
 
     R_cumulative = links[n-1].joint.get_spatial_rotation(theta_list[n-1]) #initial rotation from body n to inertial frame
     R_cumulative = R_cumulative[:3, :3]
