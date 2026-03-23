@@ -138,17 +138,28 @@ class MultiBodySystem:
     def get_state_dot(self,t,state,V_base,A_base):
         theta_list, beta_list = self.unpack_state(state)
 
-        theta_dot_list = []
+        state_dot = np.empty_like(state) #storage initlization
 
         tau_list = [np.zeros(link.joint.nw) for link in self.links]
 
+        #used append before - updated to inserting by direct indexing. This should be faster
+
+        idx_theta = 0
         for i in range(len(self.links)):
-            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i])
-            theta_dot_list.append(theta_dot)
+            nq = self.links[i].joint.nq
+            state_dot[idx_theta : idx_theta + nq] = self.links[i].joint.get_derrivative(theta_list[i], beta_list[i])
+            idx_theta += nq
 
-        beta_dot_list, V,_,_,_,_ = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)  
+        beta_dot_list, V,_,_,_,_ = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
 
-        state_dot = np.concatenate(theta_dot_list + beta_dot_list)
+        #inserting from beta_dot_list
+
+        idx_beta = self.total_nq 
+        for i in range(len(self.links)):
+            nw = self.links[i].joint.nw
+            state_dot[idx_beta : idx_beta + nw] = beta_dot_list[i]
+            idx_beta += nw
+
         return state_dot, V
 
     def get_state_dot_closed(self,t,state,V_base,A_base,BG_params):
@@ -161,9 +172,16 @@ class MultiBodySystem:
         #CALCULATION OF THETA_DOT
         theta_dot_list = []
 
-        for i in range(len(self.links)):
-            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i])
-            theta_dot_list.append(theta_dot)
+        #preallocating memory 
+        state_dot = np.empty_like(state)
+
+        
+        #filling in theta_dot using joint.get_derrivative based on current theta and beta
+        idx_theta = 0
+        for i in range(n):
+            nq = self.links[i].joint.nq
+            state_dot[idx_theta : idx_theta + nq] = self.links[i].joint.get_derrivative(theta_list[i], beta_list[i])
+            idx_theta += nq
 
         #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC)
         beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
@@ -224,10 +242,13 @@ class MultiBodySystem:
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
 
-        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
+        #inerting beta_dot into state_dot by indexing
 
-        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
-
+        idx_beta = self.total_nq
+        for i in range(n):
+            nw = self.links[i].joint.nw
+            state_dot[idx_beta : idx_beta + nw] = beta_dot_f_list[i] + beta_dot_delta_list[i]
+            idx_beta += nw
         return state_dot, V_f
     
 
@@ -321,7 +342,7 @@ class MultiBodySystem:
         def ODEfun(t, state, A_base, V_base):
             if config == "closed":
                 if BG_params is None:
-                    raise ValueError("BG_params must be provided for closed-loop simulation.")
+                    raise ValueError("BG_params must be provided for closed-loop simulation.")    
                 return self.get_state_dot_closed(t, state, V_base, A_base, BG_params)
             elif config == "open":
                 return self.get_state_dot(t, state, V_base, A_base)
