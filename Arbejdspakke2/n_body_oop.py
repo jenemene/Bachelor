@@ -33,7 +33,7 @@ tspan = np.arange(0,5,0.01)
 V_base = np.zeros(6)
 A_base = np.zeros(6)
 A_base[-1] = 9.81 #simulating gravity in z
-BG = np.array([2500, 2000])
+BG = np.array([2000, 2500])
 
 robot.plot_initial_state(config="closed")
 

@@ -102,7 +102,7 @@ class MultiBodySystem:
         self.tspan = None
 
     def add_link(self,link):
-        self.links.append(link)
+        self.links.insert(0,link)
         self.total_nq += link.joint.nq
         self.total_nw += link.joint.nw
     
@@ -210,7 +210,7 @@ class MultiBodySystem:
         #solving for lagrange multipliers
         #λ = -np.linalg.solve((Q@Λ_block@Q.T),f) # Dimension: 
         
-        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
+        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0] #does not throw and error if the matrix is singular. This is kind of cheating, but the matrix has a tendency to become singular for revolute systems.
 
         #calculating f_c
         f_c_closed_loop_const =  -Q.T@λ
@@ -348,7 +348,6 @@ class MultiBodySystem:
         self.tspan = tspan
         print("Simulation finished")
 
-
     def omega(self,theta_list,tau_bar,D,n):
         #storage
         gamma = [None]*(n+2)
@@ -427,7 +426,7 @@ class MultiBodySystem:
             cRp = pRc.T
 
             xi_delta[k] = links[k].RBT @ pRc @ tau_bar[k-1] @ xi_delta[k-1] - f_c[k] # f_c er allerede rykket ind. DET ER HER DER ER NOGET MED FORTEGN
-            nu[k] = -np.linalg.solve(D[k],links[k].joint.H @ xi_delta[k])
+            nu[k] = np.linalg.solve(D[k],links[k].joint.H @ xi_delta[k])
 
         #scatter pass
         for k in range(n,0,-1):
