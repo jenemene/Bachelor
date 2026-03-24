@@ -1,0 +1,137 @@
+import numpy as np
+from utils import soa as SOA
+from utils import plotting as SOAplt
+import time
+from initial_configs import initial_configs_closed as iniconf
+
+def N_body_pendulum_closed(n, link, tspan, state0, BG_params):
+    start = time.perf_counter()
+    print("--- Simulation started ---")
+    print(f"Progress (until {tspan[-1]:.0f}):")
+
+    def ODEfun(t, state, n, link, BG_params):
+        #solve_ivp passes state as np.array. It is unpacked, and then passed to ATBI as a a list of form state = [theta,beta].
+
+        #unpacking state
+        theta = state[:4*n]
+        beta = state[4*n:]
+
+        #normalizing quartenions
+        theta = SOA.normalize_quaternions(theta) 
+        
+        #calculating theta_dot based on the derrivmap function
+        theta_dot = np.zeros(len(theta))
+        for i in range(n):
+            idxq = 4*i #these indexes assume that we ONLY have spherical joints
+            idxw = 3*i
+            theta_dot[idxq:idxq+4] = SOA.derrivmap(theta[idxq:idxq+4],beta[idxw:idxw+3],"spherical")
+            
+        #Calculationg of generalized accelerations without any constraints (beta_dot_free) - this requires ATBI. 
+        tau_vec = np.zeros_like(beta) #no external torques
+
+        A_f, V_f, beta_dot_f_list, tau_bar, D, G = SOA.ATBI(state, tau_vec, n, link)
+
+        beta_dot_f = np.concatenate([b.flatten() for b in beta_dot_f_list[1:n+1]])
+
+        #Calculation of A_nd (V_nd is not needed as Q is constant) 
+
+        IR1 = SOA.get_rotation_tip_to_body_I(theta, n) #rotations to to ensure we are consistent with frames
+        IRn = SOA.spatialrotfromquat(theta[4*(n-1):4*(n-1)+4])
+        #A_nd = np.concatenate([IRn @ A_f[n],IR1 @ link.RBT.T @ A_f[1]]) # Hvis denne bruges, så tjek her om den er i rigtig rækkefølge ift. Q og udledning.
+
+        #Setting up Q
+        d = np.block([np.zeros((3,3)), np.eye(3)])
+        Q = np.block([d])
+
+        #need to calculate LAMDA (the matrix thing). For that we need elements of OMEGA
+        omega_nn, omega_n1, omega_1n, omega_11= SOA.omega(theta,link,tau_bar,D,n)
+
+        #calculating block entires and rotating to frame I
+        Λ_11 =link.RBT.T @ omega_11 @ link.RBT
+
+        Λ_block =  IR1 @ Λ_11 @ IR1.T
+
+        positions = SOA.compute_pos_in_inertial_frame(state, link.l_hinge, n)
+
+        l_IO1 = positions[1]
+        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
+        
+        ω = np.pi
+
+        #f_driver = np.array([0.2 + 0.1*np.sin(ω*t),0,0])
+        #f_d_driver = np.array([0.2 - 0.1*ω*np.cos(ω*t),0,0])
+        #f_dd_driver = np.array([0.2 - 0.1*ω**2*np.sin(ω*t),0,0])
+
+        f_driver = np.array([0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)])
+        f_d_driver = np.array([-0.2*ω*np.sin(ω*t), 0, 0.2*ω*np.cos(ω*t)])
+        f_dd_driver = np.array([-0.2*ω**2*np.cos(ω*t), 0, -0.2*ω**2*np.sin(ω*t)])
+
+        Φ =  l_IO1 + IR1[:3, :3]@link.l_hinge - f_driver
+        Φ_dot = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge) - f_d_driver
+        Φ_ddot = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge) - f_dd_driver
+        
+        #---------------------------------PRINTING HERE---------------------------------------#
+        print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.8f}")
+
+        α, β = BG_params
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β) # Parametrene er vi slet ikke sikker på)
+
+        #solving for lagrange multipliers
+        λ = -np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
+
+        #calculating f_c
+        f_c_closed_loop_const =  - Q.T@λ
+        f_c = [np.zeros(6,) for _ in range(n+2)]
+
+        f_c[1] = link.RBT @ IR1.T @ f_c_closed_loop_const # SKAL VÆRE SÅDAN HER!!!
+
+        #calculating beta_dot_delta
+        beta_dot_delta_list = SOA.beta_dot_delta(theta,tau_bar,link,n,D,f_c,G) #returns a list
+
+        beta_dot_delta = np.concatenate([b.flatten() for b in beta_dot_delta_list[1:n+1]])
+
+        beta_dot = beta_dot_delta + beta_dot_f
+
+        state_dot = np.concatenate([theta_dot, beta_dot.flatten()])
+
+        return state_dot, V_f
+    
+    result, V_values = SOA.RK4_int_with_V_BG(ODEfun, state0, tspan, n, link, BG_params)
+    
+    end = time.perf_counter()
+    print(f"Integration time: {end - start:.2f} seconds")
+    print("--- Simulation finished ---")
+
+    return result, V_values, link
+
+### LINK SETUP ###
+m = 20
+l_hinge = np.array([0,0,0.2])
+link = SOA.SimpleLink(m, l_hinge)
+link.set_hingemap("spherical")
+
+### SIMULATION SETTINGS ###
+n_bodies = 2
+simulation_length = 5
+dt = 0.001
+state0 = iniconf.N2_crank(n_bodies)
+
+### PLOT INITIAL STATE ###
+SOAplt.plot_initial_state(state0, link, config="closed")
+
+### BAUMGARTE PARAMETERS ###
+α = 2000
+β = 2500
+BG_params = np.array([α, β])
+
+### RUN SIMULATION ###
+tspan = np.arange(0, simulation_length+dt, dt)
+states, V_values, link = N_body_pendulum_closed(n_bodies, link, tspan, state0, BG_params)
+
+### ANIMATION ###
+SOAplt.plot_initial_state(state0, link, config="closed")
+SOAplt.animation_plot(states, tspan, link, config="closed", step=30)
+
+### ENERGY CHECK ###
+#SOAplt.check_energies(states, V_values, tspan, link, n_bodies, "closed_3", TE_only=False)
+#SOAplt.check_energies(states, V_values, tspan, link, n_bodies, "closed_3", TE_only=True)
