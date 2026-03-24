@@ -111,10 +111,10 @@ link = SOA.SimpleLink(m, l_hinge)
 link.set_hingemap("spherical")
 
 ### SIMULATION SETTINGS ###
-n_bodies = 2
+n_bodies = 3
 simulation_length = 5
 dt = 0.001
-state0 = iniconf.N2_crank(n_bodies)
+state0 = iniconf.N3_bar(n_bodies)
 
 ### PLOT INITIAL STATE ###
 SOAplt.plot_initial_state(state0, link, config="closed")
