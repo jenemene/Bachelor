@@ -74,7 +74,7 @@ class FreeJoint(Joint):
     def get_derrivative(self,theta,beta):
         theta_rot_dot = SOA.derrivmap(theta[:4],beta[:3],"spherical")
         rot = SOA.rotfromquat(theta[:4])
-        theta_trans_dot = beta[3:] #rot@beta[3:]  #umiddelbart bedste bud er fejl her.
+        theta_trans_dot = rot@beta[3:]  #Animationen virker her hvis den er transposed - fysikken not so much. Den skal IKKE være transposed
         return np.concatenate([theta_rot_dot, theta_trans_dot])
     
     def get_spatial_rotation(self,theta):
