@@ -10,7 +10,9 @@ robot = ob.MultiBodySystem()
 #defining joints
 joint1 = ob.FreeJoint()
 
-
+quat = SOA.quatfromrev(np.pi,"y")
+pos = np.array([0.2,0,0])
+joint1.q_init = np.concatenate([quat,pos])
 
 #defining link
 link1 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
@@ -29,7 +31,7 @@ A_base[-1] = 9.81 #simulating gravity in z
 robot.plot_initial_state("open")
 
 
-robot.simulate(tspan,V_base,A_base,"open",BG_params=[100,500])
+robot.simulate(tspan,V_base,A_base,"driver",BG_params=[1000,5])
 
 
 robot.plot_gen_velocities()
