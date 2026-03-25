@@ -16,6 +16,22 @@ def N2_crank(n):
 
     return state0
 
+def N3_cube(n):
+    # Calculate initial config for n bodies
+    q3 = SOA.quatfromrev(np.pi, "y")
+    q2 = SOA.quatfromrev(3*np.pi/2, "y")
+    q1 = SOA.quatfromrev(3*np.pi/2, "y")
+    q_all = np.concatenate([q1, q2, q3])
+
+    # Create the zero vectors for the other initial velocities states (n, 3)
+    ω = np.zeros(3)
+    ω_all = np.tile(ω, n)
+
+    # Concatenate into one long state vector
+    state0 = np.concatenate([q_all, ω_all])
+
+    return state0
+
 def N3_bar(n):
     # Calculate initial config for n bodies
     q3 = SOA.quatfromrev(5*np.pi/4, "y")

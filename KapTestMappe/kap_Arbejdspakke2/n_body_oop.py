@@ -12,9 +12,9 @@ joint2 = ob.SphericalJoint()
 joint1 = ob.SphericalJoint()
 
 #initial conditions
-joint3.q_init = SOA.quatfromrev(5*np.pi/4, "y")
-joint2.q_init = SOA.quatfromrev(5*np.pi/4, "y")
-joint1.q_init = SOA.quatfromrev(7*np.pi/4, "y")
+joint3.q_init = SOA.quatfromrev(np.pi, "y")
+joint2.q_init = SOA.quatfromrev(3*np.pi/2, "y")
+joint1.q_init = SOA.quatfromrev(3*np.pi/2, "y")
 
 #defining link
 link3 = ob.Link(mass=20, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
@@ -33,11 +33,11 @@ V_base = np.zeros(6)
 A_base = np.zeros(6)
 A_base[-1] = 9.81 #simulating gravity in z
 
-#robot.plot_initial_state(config="open")
+robot.plot_initial_state(config="closed")
 
 BG = np.array([2000,2500])
 robot.simulate(tspan, V_base, A_base, config="driver_bottom", BG_params=BG)
 
 #robot.plot_gen_velocities()
 
-robot.animation(config="open",step=50)
+robot.animation(config="closed",step=30)

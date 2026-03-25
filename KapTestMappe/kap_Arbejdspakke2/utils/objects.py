@@ -362,22 +362,21 @@ class MultiBodySystem:
         Φ_dot = IR1_3@V_f[1][3:] + ω_tilde_I@IR1_3@link1.l_hinge - f_d_driver
         Φ_ddot = IR1_3@A_f[1][3:] + SOA.skewfromvec(IR1_3@A_f[1][:3])@IR1_3@link1.l_hinge + ω_tilde_I@ω_tilde_I@IR1_3@link1.l_hinge - f_dd_driver
 
+        print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.8f}")
+
         # Baumgarte stabilization
         α, β = BG_params
         f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β)
 
-        #print(f"t={t:.3f}   l_IO1={l_IO1}   IR1_3@link1.l_hinge={IR1_3@link1.l_hinge}")
-        print(f"t={t:.3f}   |Φ| = {np.linalg.norm(Φ):.8f}")
-
         #solving for lagrange multipliers
-        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
-        #λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
+        #λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
+        λ = -np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
 
         #calculating f_c
         f_c_closed_loop_const = -Q.T @ λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
-        f_c[1] = IR1.T @ f_c_closed_loop_const
+        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const
 
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
@@ -687,9 +686,12 @@ class MultiBodySystem:
     def animation(self, config="openclosed", step=1):
         assert self.result is not None, "No simulation result found. Please run simulation before calling animation()."
 
+        ani_tspan = self.tspan[::step]
+        ani_states = self.result[:, ::step]
+
         # Number of bodies and time steps
         n = len(self.links)
-        N = self.result.shape[1]
+        N = ani_states.shape[1]
 
         # Setting up the figure and 3D axis
         fig = plt.figure()
@@ -731,14 +733,14 @@ class MultiBodySystem:
         
         # Update function for animation
         def update(frame):
-            state_k = self.result[:, frame]
+            state_k = ani_states[:, frame]
             positions = compute_positions(state_k)
             line.set_data(positions[:, 0], positions[:, 1])
             line.set_3d_properties(positions[:, 2])
-            ax.set_title(f"t = {self.tspan[frame]:.3f} s")
+            ax.set_title(f"t = {ani_tspan[frame]:.3f} s")
 
         # Just a robust way of calculating the interval between frames for the animation, based on the time vector. Could also do tspan[1] - tspan[0]. 
-        dt = np.mean(np.diff(self.tspan))
+        dt = np.mean(np.diff(ani_tspan))
         interval = dt * 1000 # Convert to milliseconds for FuncAnimation
         ani = FuncAnimation(
             fig, update, frames=N, interval=interval, blit=False

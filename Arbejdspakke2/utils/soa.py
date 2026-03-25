@@ -347,7 +347,7 @@ def beta_dot_delta(theta_vec,tau_bar,link,n,D,f_c,G):
         cRp = pRc.T 
         
         xi_delta[k] = link.RBT@pRc@tau_bar[k-1]@xi_delta[k-1] - f_c[k] #f_c er allerede rykket ud, derfor RBT er udeladt her
-        nu[k] = -np.linalg.solve(D[k],link.H@xi_delta[k]) #skulle være ok den her linje
+        nu[k] = np.linalg.solve(D[k],link.H@xi_delta[k]) #skulle være ok den her linje
 
     for k in range(n,0,-1):
         pRc = spatialrotfromquat(theta[k]) 
@@ -386,7 +386,7 @@ def compute_pos_in_inertial_frame(theta_list, links, n):
     positions = [None]*(n+1)
 
     #BC for position of base body
-    positions[n] = np.zeros(3)
+    positions[n] = links[n-1].joint.get_translation(theta_list[n-1])
 
     R_cumulative = links[n-1].joint.get_spatial_rotation(theta_list[n-1]) #initial rotation from body n to inertial frame
     R_cumulative = R_cumulative[:3, :3]

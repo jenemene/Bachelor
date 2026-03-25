@@ -58,13 +58,13 @@ def N_body_pendulum_closed(n, link, tspan, state0, BG_params):
         
         ω = np.pi
 
-        #f_driver = np.array([0.2 + 0.1*np.sin(ω*t),0,0])
-        #f_d_driver = np.array([0.2 - 0.1*ω*np.cos(ω*t),0,0])
-        #f_dd_driver = np.array([0.2 - 0.1*ω**2*np.sin(ω*t),0,0])
+        f_driver = np.array([0.2 + 0.1*np.sin(ω*t),0,0])
+        f_d_driver = np.array([0.2 - 0.1*ω*np.cos(ω*t),0,0])
+        f_dd_driver = np.array([0.2 - 0.1*ω**2*np.sin(ω*t),0,0])
 
-        f_driver = np.array([0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)])
-        f_d_driver = np.array([-0.2*ω*np.sin(ω*t), 0, 0.2*ω*np.cos(ω*t)])
-        f_dd_driver = np.array([-0.2*ω**2*np.cos(ω*t), 0, -0.2*ω**2*np.sin(ω*t)])
+        #f_driver = np.array([0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)])
+        #f_d_driver = np.array([-0.2*ω*np.sin(ω*t), 0, 0.2*ω*np.cos(ω*t)])
+        #f_dd_driver = np.array([-0.2*ω**2*np.cos(ω*t), 0, -0.2*ω**2*np.sin(ω*t)])
 
         Φ =  l_IO1 + IR1[:3, :3]@link.l_hinge - f_driver
         Φ_dot = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link.l_hinge) - f_d_driver
@@ -114,7 +114,7 @@ link.set_hingemap("spherical")
 n_bodies = 3
 simulation_length = 5
 dt = 0.001
-state0 = iniconf.N3_bar(n_bodies)
+state0 = iniconf.N3_cube(n_bodies)
 
 ### PLOT INITIAL STATE ###
 SOAplt.plot_initial_state(state0, link, config="closed")
@@ -129,7 +129,6 @@ tspan = np.arange(0, simulation_length+dt, dt)
 states, V_values, link = N_body_pendulum_closed(n_bodies, link, tspan, state0, BG_params)
 
 ### ANIMATION ###
-SOAplt.plot_initial_state(state0, link, config="closed")
 SOAplt.animation_plot(states, tspan, link, config="closed", step=30)
 
 ### ENERGY CHECK ###
