@@ -86,8 +86,8 @@ class FreeJoint(Joint):
 class Link:
     def __init__(self,mass,l_hinge,joint):
         self.m = mass
-        self.l_com = l_hinge/2
         self.l_hinge = l_hinge
+        self.l_com = l_hinge/2
         self.joint = joint
 
         l = np.linalg.norm(l_hinge)
@@ -100,7 +100,9 @@ class Link:
     
         self.M = SOA.RBT(self.l_com)@self.M_c@SOA.RBT(self.l_com).T 
 
-        self.RBT = SOA.RBT(l_hinge)
+        self.RBT = SOA.RBT(self.l_hinge)
+
+        self.RBT_com = SOA.RBT(self.l_com)
 
 class MultiBodySystem:
     def __init__(self):
@@ -131,9 +133,11 @@ class MultiBodySystem:
         for link in self.links:
             theta = state[idx_theta: idx_theta+link.joint.nq]
             
-            # # Normalization safety check for quaternions
-            # if link.joint.nq == 4:
-            #     theta = SOA.normalize_quaternions(theta)
+            # Normalization safety check for quaternions
+            if link.joint.nq == 4:
+                theta = SOA.normalize_quaternions(theta)
+            elif link.joint.nq == 7:
+                theta[:4] = SOA.normalize_quaternions(theta[:4])
                 
             theta_list.append(theta)
             idx_theta += link.joint.nq 
@@ -275,11 +279,11 @@ class MultiBodySystem:
         
         l_IOn = positions[n]
 
-        ω = np.pi #angular velocity of the driver
+        ω = 2*np.pi #angular velocity of the driver
 
-        f_driver = np.array([0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
-        f_d_driver = np.array([-ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
-        f_dd_driver = np.array([-ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
+        f_driver = np.array([0*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
+        f_d_driver = np.array([0*-ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
+        f_dd_driver = np.array([0*-ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
 
         Φ = l_IOn #- f_driver
         Φ_dot = IRn[:3, :3]@V_f[n][3:]  #- f_d_driver
@@ -307,9 +311,11 @@ class MultiBodySystem:
 
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
+        print(f"t = {t:.2f} beta_dot_f = {beta_dot_f_list[-1][-1]}  beta_dot_delta = {beta_dot_delta_list[-1][-1]}   theta = {theta_list[-1][-1]}   beta = {beta_list[-1][-1]}")
+
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
-        print(f"t={t:.2f}  f_c = {f_c[n][-1]} |Φ_ddot| = {np.linalg.norm(Φ_ddot):.8f}   beta_dot_delta= {beta_dot_delta_list[-1][-1]}    beta_dot_f = {beta_dot_f_list[-1][-1]}")
+        #print(f"t={t:.2f}  f_c = {-f_c[n][-1]} |Φ_ddot| = {np.linalg.norm(Φ_ddot):.8f}   beta_dot_delta= {beta_dot_delta_list[-1][-1]}    beta_dot_f = {beta_dot_f_list[-1][-1]}")
 
         return state_dot, V_f
 
@@ -417,19 +423,24 @@ class MultiBodySystem:
             
         A[n+1] = A_base
         V[n+1] = V_base
-    
+
+        # Gravity
+        g_f = [None]*(n+2)
+        g_f[n+1] = np.array([0,0,0,0,0,0*9.81])
+
         # --- ATBI scatter ---- 
         for k in range(n, 0, -1):
             pRc = links[k].joint.get_spatial_rotation(theta[k]) 
             cRp = pRc.T 
+
+            #rotating gravity such that we have that in frame aswell
+            g_f[k] = cRp@g_f[k+1]
 
             delta_V = links[k].joint.H.T @ beta[k]
             V[k] = cRp @ links[k].RBT.T @ V[k+1] + delta_V
 
             agothic[k] = SOA.spatialskewtilde(V[k]) @ links[k].joint.H.T @ beta[k]
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
-
-        g_f = np.array([0,0,0,0,0,-9.81])
 
         # --- ATBI GATHER ---
         for k in range(1, n+1): 
@@ -445,7 +456,7 @@ class MultiBodySystem:
             G[k] = np.linalg.solve(D[k], links[k].joint.H @ P).T 
             tau_bar[k] = np.eye(6) - G[k] @ links[k].joint.H
             P_plus[k] = tau_bar[k] @ P
-            xi = links[k].RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] + links[k].RBT @ links[k].M @ g_f
+            xi = links[k].RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] - links[k].RBT_com @ links[k].M @ g_f[k]
                     
             eps = tau[k] - links[k].joint.H @ xi
             nu[k] = np.linalg.solve(D[k], eps) 
@@ -481,16 +492,20 @@ class MultiBodySystem:
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for closed-loop simulation.")
                 return self.get_state_dot_closed(t, state, V_base, A_base, BG_params)
+            
             elif config == "open":
                 return self.get_state_dot(t, state, V_base, A_base)
+            
             elif config == "driver":
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for driver simulation.")
                 return self.get_state_dot_driver(t, state, V_base, A_base, BG_params)
+            
             elif config == "driver_bottom":
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for driver simulation.")
                 return self.get_state_dot_driver_bottom(t, state, V_base, A_base, BG_params)
+            
             else:
                 raise ValueError("Invalid config. Choose 'open', 'closed' or 'driver'.")
         
