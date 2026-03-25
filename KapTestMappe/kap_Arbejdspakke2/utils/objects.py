@@ -275,38 +275,41 @@ class MultiBodySystem:
         
         l_IOn = positions[n]
 
-        ω = 2*np.pi #angular velocity of the driver
-    
-        Φ = l_IOn - np.array([0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
-        Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
-        Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
+        ω = np.pi #angular velocity of the driver
+
+        f_driver = np.array([0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
+        f_d_driver = np.array([-ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
+        f_dd_driver = np.array([-ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
+
+        Φ = l_IOn #- f_driver
+        Φ_dot = IRn[:3, :3]@V_f[n][3:]  #- f_d_driver
+        Φ_ddot = IRn[:3, :3]@A_f[n][3:] #- f_dd_driver
+
+        #print(f"|Φ_ddot| = {np.linalg.norm(Φ_ddot):.8f}")
 
         # Baumgarte stabilization
         α, β = BG_params
         f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β)
 
+
         #solving for lagrange multipliers
-        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
+        #λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
+        λ = -np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
 
         #calculating f_c
         f_c_closed_loop_const = -Q.T @ λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
-        #print(f"t={t:.3f}   f_c[{n}]={f_c_closed_loop_const}")
-
         f_c[n] = IRn.T @ f_c_closed_loop_const
-
-        #print(f"t={t:.3f}   f_c[{n}] = {f_c[n]}")
-        #print(f"t={t:.3f}   |f_c[{n}]| = {np.linalg.norm(f_c[n]):.2f}   |Φ| = {np.linalg.norm(Φ):.2f}") #debug print
 
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
 
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
-        print(f"t={t:.3f}   beta_dot_f_list[{n}] = {beta_dot_f_list[-1][3]:.2f}   beta_dot_delta_list[{n}] = {beta_dot_delta_list[-1][3]:.2f}   beta_dot_final_list[{n}] = {beta_dot_final_list[-1][3]:.2f}") #debug print
-
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        print(f"t={t:.2f}  f_c = {f_c[n][-1]} |Φ_ddot| = {np.linalg.norm(Φ_ddot):.8f}   beta_dot_delta= {beta_dot_delta_list[-1][-1]}    beta_dot_f = {beta_dot_f_list[-1][-1]}")
 
         return state_dot, V_f
 
@@ -314,8 +317,9 @@ class MultiBodySystem:
         theta_list, beta_list = self.unpack_state(state)
         n = len(self.links)
 
-        #generalized forces (set to 0 for now, could be used if wanted)
-        tau_list = [np.zeros(link.joint.nw) for link in self.links]
+        # Added damping forces
+        damping_coefficient = 0.1
+        tau_list = [-damping_coefficient * beta for beta in beta_list]
 
         #CALCULATION OF THETA_DOT
         theta_dot_list = []
@@ -350,13 +354,9 @@ class MultiBodySystem:
 
         ω = np.pi
 
-        #f_driver = np.array([0.1 + 0.1*np.cos(ω*t), 0, -0.2])
-        #f_d_driver = np.array([-0.1*ω*np.sin(ω*t), 0, 0])
-        #f_dd_driver = np.array([-0.1*ω**2*np.cos(ω*t), 0, 0])
-
-        f_driver = np.array([0.2 + 0.1*np.sin(ω*t),0,0])
-        f_d_driver = np.array([0.2 - 0.1*ω*np.cos(ω*t),0,0])
-        f_dd_driver = np.array([0.2 - 0.1*ω**2*np.sin(ω*t),0,0])
+        f_driver = np.array([0.6 + 0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
+        f_d_driver = np.array([-ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
+        f_dd_driver = np.array([-ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
 
         Φ = l_IO1 + IR1_3@link1.l_hinge - f_driver
         Φ_dot = IR1_3@V_f[1][3:] + ω_tilde_I@IR1_3@link1.l_hinge - f_d_driver
@@ -429,6 +429,8 @@ class MultiBodySystem:
             agothic[k] = SOA.spatialskewtilde(V[k]) @ links[k].joint.H.T @ beta[k]
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
 
+        g_f = np.array([0,0,0,0,0,-9.81])
+
         # --- ATBI GATHER ---
         for k in range(1, n+1): 
             if k == 1:
@@ -443,7 +445,7 @@ class MultiBodySystem:
             G[k] = np.linalg.solve(D[k], links[k].joint.H @ P).T 
             tau_bar[k] = np.eye(6) - G[k] @ links[k].joint.H
             P_plus[k] = tau_bar[k] @ P
-            xi = links[k].RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k]
+            xi = links[k].RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] + links[k].RBT @ links[k].M @ g_f
                     
             eps = tau[k] - links[k].joint.H @ xi
             nu[k] = np.linalg.solve(D[k], eps) 
