@@ -457,7 +457,6 @@ class MultiBodySystem:
             A_plus = cRp @ links[k].RBT.T @ A[k+1]
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
-
         return beta_dot[1:n+1], V, A, tau_bar, D, G
     
     def simulate(self, tspan, V_base, A_base, config="open", BG_params=None):
