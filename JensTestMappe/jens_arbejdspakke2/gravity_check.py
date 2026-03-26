@@ -12,7 +12,7 @@ joint3 = ob.SphericalJoint()
 joint2 = ob.FreeJoint()
 joint1 = ob.SphericalJoint()
 
-quat = SOA.quatfromrev(0.5*np.pi,"y")
+quat = SOA.quatfromrev(0.35*np.pi,"y")
 pos = np.array([0.0,0,0])
 joint2.q_init = np.concatenate([quat,pos])
 joint1.q_init = SOA.quatfromrev(np.pi/2,"y")
