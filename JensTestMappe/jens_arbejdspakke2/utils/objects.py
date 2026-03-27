@@ -277,8 +277,8 @@ class MultiBodySystem:
         l_IOn = positions[n]
 
         ω = np.pi #angular velocity of the driver
-        x_on = 0
-        Φ = l_IOn - np.array([0.2 + x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
+        x_on = 1
+        Φ = l_IOn - np.array([0*0.2 + x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
         Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-x_on*ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
         Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-x_on*ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
 
@@ -295,7 +295,7 @@ class MultiBodySystem:
 
         #print(f"t={t:.3f}   f_c[{n}]={f_c_closed_loop_const}")
 
-        f_c[n] = 0*IRn.T @ f_c_closed_loop_const
+        f_c[n] = IRn.T @ f_c_closed_loop_const
 
         #print(f"t={t:.3f}   f_c[{n}] = {f_c[n]}")
         #print(f"t={t:.3f}   |f_c[{n}]| = {np.linalg.norm(f_c[n]):.2f}   |Φ| = {np.linalg.norm(Φ):.2f}") #debug print
@@ -305,8 +305,8 @@ class MultiBodySystem:
 
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
-        print(f"t={t:.3f}   beta_dot_f_list[{n}] = {beta_dot_f_list[-1][-1]:.2f}   beta_dot_delta_list[{n}] = {beta_dot_delta_list[-1][-1]:.2f}   beta_dot_final_list[{n}] = {beta_dot_final_list[-1][-1]:.2f}") #debug print
-
+        #print(f"t={t:.3f}   beta_dot_f_list[{n}] = {beta_dot_f_list[-1][-1]:.2f}   beta_dot_delta_list[{n}] = {beta_dot_delta_list[-1][-1]:.2f}   beta_dot_final_list[{n}] = {beta_dot_final_list[-1][-1]:.2f}") #debug print
+        print(np.linalg.norm(Φ))
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
         return state_dot, V_f
