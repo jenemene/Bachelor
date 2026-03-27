@@ -30,12 +30,12 @@ tspan = np.arange(0,5,0.001)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
-A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
+A_base[-1] = 9.81 
 
-#robot.plot_initial_state("open")
+robot.plot_initial_state("open")
 
 robot.simulate(tspan,V_base,A_base,config="driver",BG_params=[100,500])
 
-robot.plot_gen_velocities()
+robot.plot_gen_velocities() #<-------- HUSK DET ER I LOCAL FRAME. 
 
 robot.animation(config="open",step=60)
