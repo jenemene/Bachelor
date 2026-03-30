@@ -396,7 +396,7 @@ def compute_pos_in_inertial_frame(theta_list, links, n):
         pRc = pRc[:3, :3]
 
         positions[i] = positions[i+1] + R_cumulative @ links[i-1].l_hinge
-
+        
         R_cumulative = R_cumulative @ pRc
 
     return positions

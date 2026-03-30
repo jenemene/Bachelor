@@ -73,8 +73,7 @@ class FreeJoint(Joint):
 
     def get_derrivative(self,theta,beta):
         theta_rot_dot = SOA.derrivmap(theta[:4],beta[:3],"spherical")
-        rot = SOA.rotfromquat(theta[:4])
-        theta_trans_dot = rot@beta[3:] 
+        theta_trans_dot = beta[3:] 
         return np.concatenate([theta_rot_dot, theta_trans_dot])
     
     def get_spatial_rotation(self,theta):
@@ -245,9 +244,7 @@ class MultiBodySystem:
         n = len(self.links)
 
         #generalized forces (set to 0 for now, could be used if wanted)
-        #tau_list = [np.zeros(link.joint.nw) for link in self.links]
-        damping = 0.1
-        tau_list = [-damping * beta for beta in beta_list]
+        tau_list = [np.zeros(link.joint.nw) for link in self.links]
 
         #CALCULATION OF THETA_DOT
         theta_dot_list = []
@@ -260,18 +257,15 @@ class MultiBodySystem:
         beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
 
         #ROTATIONS AND CONSTRAINT SETUPS
-        link1 = self.links[0]
         linkn = self.links[-1]
 
         IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
-        IR1 = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)
 
         Q = np.block([np.zeros((3,3)), np.eye(3)])
 
         #OPERTATIONAL SPACE INERTIA
         omega_nn, omega_n1, omega_1n, omega_11= self.omega(theta_list,tau_bar,D,n)
 
-        # DRIVER
         #calculating block entires
         Λ_nn = IRn @ (omega_nn @ IRn.T)
 
@@ -282,8 +276,8 @@ class MultiBodySystem:
         l_IOn = positions[n]
 
         ω = np.pi #angular velocity of the driver
-        x_on = 1
-        Φ = l_IOn - np.array([x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
+        x_on = 0
+        Φ = l_IOn - np.array([0.2 + x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
         Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-x_on*ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
         Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-x_on*ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
 
@@ -298,52 +292,20 @@ class MultiBodySystem:
         f_c_closed_loop_const = -Q.T @ λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
-        f_c[n] = IRn.T @ f_c_closed_loop_const
+        #print(f"t={t:.3f}   f_c[{n}]={f_c_closed_loop_const}")
 
+        f_c[n] = 0*IRn.T @ f_c_closed_loop_const
 
-
-
-
-
-        # HOLDING CONSTRAINT
-        #calculating block entires
-        Λ_11 = IR1 @ (link1.RBT.T @ omega_11 @ link1.RBT ) @ IR1.T
-
-        Λ_block_h = Λ_11
-
-        l_IO1 = positions[1]
-        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
-
-        Φ_h = (l_IO1 + IR1[:3, :3]@link1.l_hinge) - np.array([0.4, 0, 0])
-        Φ_dot_h = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge)
-        Φ_ddot_h = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge)
-
-        # Baumgarte stabilization
-        
-        f_h = SOA.baumgarte_stab(Φ_h, Φ_dot_h, Φ_ddot_h, α, β)
-
-        #solving for lagrange multipliers
-        λ_h = -np.linalg.lstsq((Q @ Λ_block_h @ Q.T), f_h, rcond=None)[0]
-
-        #calculating f_c
-        f_c_closed_loop_const_h = -Q.T @ λ_h
-
-        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const_h
-
-
-
-
-
-
+        #print(f"t={t:.3f}   f_c[{n}] = {f_c[n]}")
+        #print(f"t={t:.3f}   |f_c[{n}]| = {np.linalg.norm(f_c[n]):.2f}   |Φ| = {np.linalg.norm(Φ):.2f}") #debug print
 
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
 
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
-        Φ_norm = np.linalg.norm(Φ)
-        Φ_norm_h = np.linalg.norm(Φ_h)
-        print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}    Constraint = {Φ_norm_h:.2e}")
+        print(f"t={t:.3f}   beta_dot_f_list[{n}] = {beta_dot_f_list[-1][-1]:.2f}   beta_dot_delta_list[{n}] = {beta_dot_delta_list[-1][-1]:.2f}   beta_dot_final_list[{n}] = {beta_dot_final_list[-1][-1]:.2f}") #debug print
+
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
         return state_dot, V_f
