@@ -593,7 +593,6 @@ def RK4_int_with_V_BG(odefun, initial_cond, time_vec, n, link, BG_params):
 
     return Y, V_storage
 
-
 class SimpleLink:
     def __init__(self,m,l_hinge):
 

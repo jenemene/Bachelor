@@ -110,7 +110,7 @@ def plot_initial_state(state0, link, config="openclosed"):
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
-    ax.set_title("Initial State Configuration")
+    #ax.set_title("Initial State Configuration")
 
     # Compute positions of the bodies in inertial frame based on the initial state
     positions = SOA.compute_pos_in_inertial_frame(state0[:4*n_bodies], link.l_hinge, n_bodies)
@@ -138,8 +138,8 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed", TE_onl
     PE = np.zeros(timesteps)
     TE = np.zeros(timesteps)
 
-    start = 0.1
-    step = 0.2
+    start = -0.1
+    step = -0.2
     g = 9.81
 
     if config == "open":
@@ -183,7 +183,7 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed", TE_onl
             
             # Potential energy
             zk = com_pos[k][-1] # z-pos of current body k
-            zk_pot = zk + z0[k] # potential height of current body
+            zk_pot = zk - z0[k] # potential height of current body
 
             PE_link = link.m*g*zk_pot
             PE_t += PE_link
@@ -200,7 +200,7 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed", TE_onl
         plt.plot(tspan, TE_Delta, color='black')
 
         # Formatting
-        plt.title(f"Energy of the System compared to initial energy with n={n} bodies")
+        #plt.title(f"Energy of the System compared to initial energy with n={n} bodies")
         plt.xlabel("Time [s]")
         plt.ylabel("Energy [J]")
         plt.grid(True, alpha=0.5)
@@ -221,7 +221,7 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed", TE_onl
         plt.plot(tspan, TE, label='Total Energy (TE)', linestyle='--', color='black')
 
         # Formatting
-        plt.title(f"Energy of the System with n={n} bodies")
+        #plt.title(f"Energy of the System with n={n} bodies")
         plt.xlabel("Time [s]")
         plt.ylabel("Energy [J]")
         plt.legend()
