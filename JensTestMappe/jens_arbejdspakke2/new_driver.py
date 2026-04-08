@@ -14,6 +14,7 @@ joint1 = ob.SphericalJoint()
 quat = SOA.quatfromrev(np.pi,"y")
 pos = np.array([0.2,0,0])
 joint3.q_init = np.concatenate([quat,pos])
+joint1.q_init = SOA.quatfromrev(np.pi/2,"x")
 
 #setting up link 
 link3 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
@@ -34,8 +35,8 @@ A_base[-1] = 9.81
 
 robot.plot_initial_state("open")
 
-robot.simulate(tspan,V_base,A_base,config="driver",BG_params=[100,500])
+#robot.simulate(tspan,V_base,A_base,config="driver",BG_params=[100,500])
 
-robot.plot_gen_velocities() #<-------- HUSK DET ER I LOCAL FRAME. 
+#robot.plot_gen_velocities() #<-------- HUSK DET ER I LOCAL FRAME. 
 
-robot.animation(config="open",step=60)
+#robot.animation(config="open",step=60)
