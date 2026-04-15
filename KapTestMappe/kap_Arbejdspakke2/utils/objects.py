@@ -269,7 +269,7 @@ class MultiBodySystem:
         Q = np.block([np.zeros((3,3)), np.eye(3)])
 
         #OPERTATIONAL SPACE INERTIA
-        omega_nn, omega_n1, omega_1n, omega_11= self.omega(theta_list,tau_bar,D,n)
+        omega_nn, omega_n1, omega_1n, omega_11, omega_nn_m1 = self.omega(theta_list,tau_bar,D,n)
 
         # DRIVER
         #calculating block entires
@@ -281,11 +281,21 @@ class MultiBodySystem:
         
         l_IOn = positions[n]
 
+        r = 0.2
         ω = np.pi #angular velocity of the driver
+        center = np.array([0,0,0])
+        bias = 0
+        driver, driver_dot, driver_ddot = self.circle_driver_xz_plane(r, t, ω, center, bias)
+
         x_on = 1
-        Φ = l_IOn - np.array([x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
-        Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-x_on*ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
-        Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-x_on*ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
+        Φ = l_IOn - driver
+        Φ_dot = IRn[:3, :3]@V_f[n][3:] - driver_dot
+        Φ_ddot = IRn[:3, :3]@A_f[n][3:] - driver_ddot
+        
+        #x_on = 1
+        #Φ = l_IOn - np.array([x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
+        #Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-x_on*ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
+        #Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-x_on*ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
 
         # Baumgarte stabilization
         α, β = BG_params
@@ -299,6 +309,46 @@ class MultiBodySystem:
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
         f_c[n] = IRn.T @ f_c_closed_loop_const
+
+
+
+
+
+        # DRIVER 2
+        #calculating block entires
+        IRn2 = linkn.joint.get_spatial_rotation(theta_list[-2])
+        Λ_nn2 = IRn2 @ (omega_nn_m1 @ IRn2.T)
+
+        Λ_block2 = Λ_nn2
+    
+        l_IOn2 = positions[n-1]
+
+        bias2 = -1.047197551
+        driver2, driver_dot2, driver_ddot2 = self.circle_driver_xz_plane(r, t, ω, center, bias2)
+
+        print(f"Time = {t:.2f}   D_ang = {np.arctan(driver[2]/driver[0]):.2f}   D2_ang = {np.arctan(driver2[2]/driver2[0]):.2f}    |D-D2| = {np.linalg.norm(driver-driver2):.2f}")
+
+        Φ2 = l_IOn2 - driver2
+        Φ_dot2 = IRn2[:3, :3]@V_f[n-1][3:] - driver_dot2
+        Φ_ddot2 = IRn2[:3, :3]@A_f[n-1][3:] - driver_ddot2
+        
+        #x_on = 1
+        #Φ = l_IOn - np.array([x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
+        #Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-x_on*ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
+        #Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-x_on*ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
+
+        # Baumgarte stabilization
+        f2 = SOA.baumgarte_stab(Φ2, Φ_dot2, Φ_ddot2, α, β)
+
+        #solving for lagrange multipliers
+        λ2 = -np.linalg.lstsq((Q @ Λ_block2 @ Q.T), f2, rcond=None)[0]
+
+        #calculating f_c
+        f_c_closed_loop_const2 = -Q.T @ λ2
+
+        f_c[n-1] = IRn2.T @ f_c_closed_loop_const2
+
+
 
 
 
@@ -328,7 +378,7 @@ class MultiBodySystem:
         #calculating f_c
         f_c_closed_loop_const_h = -Q.T @ λ_h
 
-        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const_h
+        #f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const_h
 
 
 
@@ -342,8 +392,9 @@ class MultiBodySystem:
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
         Φ_norm = np.linalg.norm(Φ)
+        Φ_norm2 = np.linalg.norm(Φ2)
         Φ_norm_h = np.linalg.norm(Φ_h)
-        print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}    Constraint = {Φ_norm_h:.2e}")
+        #print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}  Driver2 = {Φ_norm2:.2e}    Constraint = {Φ_norm_h:.2e}")
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
         return state_dot, V_f
@@ -588,13 +639,13 @@ class MultiBodySystem:
             omega[k] = cRp @ omega[k+1] @ link_k.RBT @ pRc @ tau_bar[k]
         
         #assigning calculated omegas
-        
+        omega_nn_m1 = omega[n-1]
         omega_nn = gamma[n]
         omega_n1 = omega[1]
         omega_1n = omega_n1.T
         omega_11 = gamma[1]
 
-        return omega_nn, omega_n1, omega_1n, omega_11
+        return omega_nn, omega_n1, omega_1n, omega_11, omega_nn_m1
   
     def beta_dot_delta(self,theta_list,tau_bar,D,f_c,G,n):
         #shifting indexing for convience (same method as in run_ATBI)
@@ -832,3 +883,18 @@ class MultiBodySystem:
         plt.show()
 
         return fig, ax
+
+    def circle_driver_xz_plane(self, r, t, omega, center, bias):
+        # Returns the driver components for the constraints equation
+        # args:
+        # r: radius of the circle
+        # t: time
+        # omega: angular velocity of the driver
+        # center: center of the circle (array-like of shape (3,))
+        # bias: the phase bias of the driver
+
+        Φ = np.array([center[0] + r * np.cos(omega * t + bias), 0, center[2] + r * np.sin(omega * t + bias)])
+        Φ_dot = np.array([-r * omega * np.sin(omega * t + bias), 0, r * omega * np.cos(omega * t + bias)])
+        Φ_ddot = np.array([-r * omega**2 * np.cos(omega * t + bias), 0, -r * omega**2 * np.sin(omega * t + bias)])
+
+        return Φ, Φ_dot, Φ_ddot
