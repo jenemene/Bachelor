@@ -229,6 +229,68 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed", TE_onl
 
         plt.show()
 
+# Jipper japper for open only (to use in report)
+def compare_energies(result, V_values, result2, V_values2, tspan, link, n):
+    timesteps = len(tspan)
+    
+    # Initialize arrays for both simulations
+    KE1, PE1, TE1 = np.zeros(timesteps), np.zeros(timesteps), np.zeros(timesteps)
+    KE2, PE2, TE2 = np.zeros(timesteps), np.zeros(timesteps), np.zeros(timesteps)
+
+    start = -0.1
+    step = -0.2
+    g = 9.81
+
+    # Reference height calculation
+    z0 = np.arange(n) * step + start
+    z0 = np.flip(z0)
+    z0 = np.insert(z0, 0, 0)
+
+    for i in range(timesteps):
+        # Simulation 1 Calculations
+        KE_t1, PE_t1 = 0.0, 0.0
+        com_pos1 = SOA.compute_com_pos_in_inertial_frame(result[:,i], link.l_hinge, n)
+        
+        # Simulation 2 Calculations
+        KE_t2, PE_t2 = 0.0, 0.0
+        com_pos2 = SOA.compute_com_pos_in_inertial_frame(result2[:,i], link.l_hinge, n)
+
+        for k in range(1, n + 1):
+            # Energy Sim 1
+            Vk1 = V_values[i][k] 
+            KE_t1 += 0.5 * (Vk1 @ link.M @ Vk1)
+            zk1_pot = com_pos1[k][-1] - z0[k]
+            PE_t1 += link.m * g * zk1_pot
+            
+            # Energy Sim 2
+            Vk2 = V_values2[i][k]
+            KE_t2 += 0.5 * (Vk2 @ link.M @ Vk2)
+            zk2_pot = com_pos2[k][-1] - z0[k]
+            PE_t2 += link.m * g * zk2_pot
+
+        TE1[i], TE2[i] = KE_t1 + PE_t1, KE_t2 + PE_t2
+
+    # Normalize total energy to drift (delta from t=0)
+    TE_Delta1 = TE1 - TE1[0]
+    TE_Delta2 = TE2 - TE2[0]
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(tspan, TE_Delta1, color='black', label='Simulation 1', linewidth=1.5)
+    plt.plot(tspan, TE_Delta2, color='red', linestyle='--', label='Simulation 2', linewidth=1.5)
+
+    # Formatting
+    plt.xlabel("Time [s]")
+    plt.ylabel("$\Delta$ Total Energy [J]")
+    plt.legend()
+    plt.grid(True, alpha=0.5)
+
+    # Force scientific notation for the y-axis
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+    plt.show()
+
 def animation_plot(states, tspan, link, config="openclosed", step=1):
     tspan = tspan[::step]
     states = states[:, ::step]
