@@ -572,6 +572,7 @@ class MultiBodySystem:
 
         theta[0]   = np.zeros_like(theta[1])
         theta[n+1] = np.zeros_like(theta[n])
+        links[0] = links[1] # For initialization, but doesn't matter, bc tau_bar is all zeros
 
         #storage
         xi_delta = [None]*(n+2)
@@ -586,7 +587,7 @@ class MultiBodySystem:
         #gather pass
         for k in range(1,n+1):
             #rotations
-            pRc = links[k].joint.get_spatial_rotation(theta[k-1]) #i tvivl om k el k-1 her :)
+            pRc = links[k-1].joint.get_spatial_rotation(theta[k-1])
             cRp = pRc.T
 
             xi_delta[k] = links[k].RBT @ pRc @ tau_bar[k-1] @ xi_delta[k-1] - f_c[k]

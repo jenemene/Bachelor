@@ -224,70 +224,84 @@ def check_energies(result, V_values, tspan, link, n, config="openclosed", TE_onl
         #plt.title(f"Energy of the System with n={n} bodies")
         plt.xlabel("Time [s]")
         plt.ylabel("Energy [J]")
-        plt.legend()
+        plt.legend(loc='best', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
         plt.grid(True, alpha=0.5)
 
         plt.show()
 
 # Jipper japper for open only (to use in report)
-def compare_energies(result, V_values, result2, V_values2, tspan, link, n):
-    timesteps = len(tspan)
-    
-    # Initialize arrays for both simulations
-    KE1, PE1, TE1 = np.zeros(timesteps), np.zeros(timesteps), np.zeros(timesteps)
-    KE2, PE2, TE2 = np.zeros(timesteps), np.zeros(timesteps), np.zeros(timesteps)
+def compare_energies(result1, V_values1, tspan1, result2, V_values2, tspan2, link, n, config="open"):
+    def calculate_energy_drift(res, V_vals, t_span):
+        timesteps = len(t_span)
+        TE = np.zeros(timesteps)
+        g = 9.81
+        start = -0.1
+        step = -0.2
 
-    start = -0.1
-    step = -0.2
-    g = 9.81
+        # Logic for z0 based on your 'check_energies' function
+        if config == "open":
+            z0 = np.arange(n) * step + start
+            z0 = np.flip(z0)
+            z0 = np.insert(z0, 0, 0)
+        elif config == "closed":
+            ztemp = np.arange(n/2) * step + start
+            z0 = np.concatenate([ztemp, np.flip(ztemp)])
+            z0 = np.insert(z0, 0, 0)
+        # ... (You can add your other config elifs here as needed)
+        else:
+            # Default to open if not specified
+            z0 = np.arange(n) * step + start
+            z0 = np.flip(z0)
+            z0 = np.insert(z0, 0, 0)
 
-    # Reference height calculation
-    z0 = np.arange(n) * step + start
-    z0 = np.flip(z0)
-    z0 = np.insert(z0, 0, 0)
+        for i in range(timesteps):
+            KE_t = 0.0
+            PE_t = 0.0
+            com_pos = SOA.compute_com_pos_in_inertial_frame(res[:,i], link.l_hinge, n)
 
-    for i in range(timesteps):
-        # Simulation 1 Calculations
-        KE_t1, PE_t1 = 0.0, 0.0
-        com_pos1 = SOA.compute_com_pos_in_inertial_frame(result[:,i], link.l_hinge, n)
-        
-        # Simulation 2 Calculations
-        KE_t2, PE_t2 = 0.0, 0.0
-        com_pos2 = SOA.compute_com_pos_in_inertial_frame(result2[:,i], link.l_hinge, n)
+            for k in range(1, n + 1):            
+                # Kinetic energy
+                Vk = V_vals[i][k] 
+                KE_t += 0.5 * (Vk @ link.M @ Vk)
+                
+                # Potential energy
+                zk_pot = com_pos[k][-1] - z0[k]
+                PE_t += link.m * g * zk_pot
 
-        for k in range(1, n + 1):
-            # Energy Sim 1
-            Vk1 = V_values[i][k] 
-            KE_t1 += 0.5 * (Vk1 @ link.M @ Vk1)
-            zk1_pot = com_pos1[k][-1] - z0[k]
-            PE_t1 += link.m * g * zk1_pot
+            TE[i] = KE_t + PE_t
             
-            # Energy Sim 2
-            Vk2 = V_values2[i][k]
-            KE_t2 += 0.5 * (Vk2 @ link.M @ Vk2)
-            zk2_pot = com_pos2[k][-1] - z0[k]
-            PE_t2 += link.m * g * zk2_pot
+        return TE - TE[0] # Drift from initial
 
-        TE1[i], TE2[i] = KE_t1 + PE_t1, KE_t2 + PE_t2
+    # Calculate for both
+    drift1 = calculate_energy_drift(result1, V_values1, tspan1)
+    drift2 = calculate_energy_drift(result2, V_values2, tspan2)
 
-    # Normalize total energy to drift (delta from t=0)
-    TE_Delta1 = TE1 - TE1[0]
-    TE_Delta2 = TE2 - TE2[0]
-
+    # Plotting
     plt.figure(figsize=(10, 6))
-    plt.plot(tspan, TE_Delta1, color='black', label='Simulation 1', linewidth=1.5)
-    plt.plot(tspan, TE_Delta2, color='red', linestyle='--', label='Simulation 2', linewidth=1.5)
+    
+    dt1 = tspan1[1] - tspan1[0]
+    dt2 = tspan2[1] - tspan2[0]
+
+    plt.plot(tspan1, drift1, color='black', label=f'dt = {dt1:.2e}', linewidth=1.5)
+    plt.plot(tspan2, drift2, color='red', linestyle='--', label=f'dt = {dt2:.2e}', linewidth=1.5)
 
     # Formatting
-    plt.xlabel("Time [s]")
-    plt.ylabel("$\Delta$ Total Energy [J]")
-    plt.legend()
+    plt.xlabel("Time [s]", fontsize=12)
+    plt.ylabel(r"$\Delta$ Total Energy [J]", fontsize=12)
     plt.grid(True, alpha=0.5)
 
-    # Force scientific notation for the y-axis
+    # --- Legend Customization ---
+    # loc='best' finds the emptiest corner
+    # fontsize can be a number or 'large', 'x-large'
+    plt.legend(loc='best', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
+
+    # Force scientific notation on Y-axis
     ax = plt.gca()
     ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
     ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+    
+    # Increase size of axis tick numbers for better report visibility
+    ax.tick_params(axis='both', which='major', labelsize=11)
 
     plt.show()
 

@@ -264,7 +264,6 @@ class MultiBodySystem:
         linkn = self.links[-1]
 
         IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
-        IR1 = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)
 
         Q = np.block([np.zeros((3,3)), np.eye(3)])
 
@@ -314,10 +313,124 @@ class MultiBodySystem:
 
 
 
+        # HOLDING CONSTRAINT
+        #calculating block entires
+        IR1 = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)
+        Λ_11 = IR1 @ (link1.RBT.T @ omega_11 @ link1.RBT ) @ IR1.T
+
+        Λ_block_h = Λ_11
+
+        l_IO1 = positions[1]
+        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
+
+        Φ_h = (l_IO1 + IR1[:3, :3]@link1.l_hinge) - np.array([0.4, 0, 0])
+        Φ_dot_h = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge)
+        Φ_ddot_h = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge)
+
+        # Baumgarte stabilization
+        
+        f_h = SOA.baumgarte_stab(Φ_h, Φ_dot_h, Φ_ddot_h, α, β)
+
+        #solving for lagrange multipliers
+        λ_h = -np.linalg.lstsq((Q @ Λ_block_h @ Q.T), f_h, rcond=None)[0]
+
+        #calculating f_c
+        f_c_closed_loop_const_h = -Q.T @ λ_h
+
+        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const_h
+
+
+
+
+
+
+
+        #calculating beta_dot_delta
+        beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
+
+        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
+
+        Φ_norm = np.linalg.norm(Φ)
+        Φ_norm2 = np.linalg.norm(Φ2)
+        Φ_norm_h = np.linalg.norm(Φ_h)
+        #print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}  Driver2 = {Φ_norm2:.2e}    Constraint = {Φ_norm_h:.2e}")
+        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        return state_dot, V_f
+
+    def get_state_dot_driver2(self,t,state,V_base,A_base,BG_params):
+        theta_list, beta_list = self.unpack_state(state)
+        n = len(self.links)
+
+        #generalized forces (set to 0 for now, could be used if wanted)
+        #tau_list = [np.zeros(link.joint.nw) for link in self.links]
+        damping = 0.1
+        tau_list = [-damping * beta for beta in beta_list]
+
+        #CALCULATION OF THETA_DOT
+        theta_dot_list = []
+
+        for i in range(len(self.links)):
+            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i]) #CAN CHANGE THIS TO PREALLOCATE FOR SPEED OPTIMIZATION!
+            theta_dot_list.append(theta_dot)
+
+        #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC)
+        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
+
+        #ROTATIONS AND CONSTRAINT SETUPS
+        link1 = self.links[0]
+        linkn = self.links[-1]
+
+        IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
+
+        Q = np.block([np.zeros((3,3)), np.eye(3)])
+
+        #OPERTATIONAL SPACE INERTIA
+        omega_nn, omega_n1, omega_1n, omega_11, omega_nn2 = self.omega(theta_list,tau_bar,D,n)
+
+        # DRIVER
+        #calculating block entires
+        Λ_nn = IRn @ (omega_nn @ IRn.T)
+
+        Λ_block = Λ_nn
+
+        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+        
+        l_IOn = positions[n]
+
+        r = 0.2
+        ω = np.pi #angular velocity of the driver
+        center = np.array([0,0,0])
+        bias = 0
+        driver, driver_dot, driver_ddot = self.circle_driver_xz_plane(r, t, ω, center, bias)
+
+        Φ = l_IOn - driver
+        Φ_dot = IRn[:3, :3]@V_f[n][3:] - driver_dot
+        Φ_ddot = IRn[:3, :3]@A_f[n][3:] - driver_ddot
+
+        # Baumgarte stabilization
+        α, β = BG_params
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β)
+
+        #solving for lagrange multipliers
+        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
+
+        #calculating f_c
+        f_c_closed_loop_const = -Q.T @ λ
+        f_c = [np.zeros(6,) for _ in range(n+2)]
+
+        f_c[n] = IRn.T @ f_c_closed_loop_const
+
+
+
+
+
         # DRIVER 2
         #calculating block entires
-        IRn2 = linkn.joint.get_spatial_rotation(theta_list[-2])
-        Λ_nn2 = IRn2 @ (omega_nn_m1 @ IRn2.T)
+        linkn2 = self.links[-2]
+        IRn2 = IRn @ linkn2.joint.get_spatial_rotation(theta_list[-2])
+        IRn2 = IRn
+        Λ_nn2 = IRn2 @ omega_nn2 @ IRn2.T
 
         Λ_block2 = Λ_nn2
     
@@ -326,16 +439,11 @@ class MultiBodySystem:
         bias2 = -1.047197551
         driver2, driver_dot2, driver_ddot2 = self.circle_driver_xz_plane(r, t, ω, center, bias2)
 
-        print(f"Time = {t:.2f}   D_ang = {np.arctan(driver[2]/driver[0]):.2f}   D2_ang = {np.arctan(driver2[2]/driver2[0]):.2f}    |D-D2| = {np.linalg.norm(driver-driver2):.2f}")
+        #print(f"Time = {t:.2f}   D_ang = {np.arctan(driver[2]/driver[0]):.2f}   D2_ang = {np.arctan(driver2[2]/driver2[0]):.2f}    |D-D2| = {np.linalg.norm(driver-driver2):.2f}")
 
         Φ2 = l_IOn2 - driver2
         Φ_dot2 = IRn2[:3, :3]@V_f[n-1][3:] - driver_dot2
         Φ_ddot2 = IRn2[:3, :3]@A_f[n-1][3:] - driver_ddot2
-        
-        #x_on = 1
-        #Φ = l_IOn - np.array([x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
-        #Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-x_on*ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
-        #Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-x_on*ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
 
         # Baumgarte stabilization
         f2 = SOA.baumgarte_stab(Φ2, Φ_dot2, Φ_ddot2, α, β)
@@ -351,12 +459,9 @@ class MultiBodySystem:
 
 
 
-
-
-
-
         # HOLDING CONSTRAINT
         #calculating block entires
+        IR1 = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)
         Λ_11 = IR1 @ (link1.RBT.T @ omega_11 @ link1.RBT ) @ IR1.T
 
         Λ_block_h = Λ_11
@@ -383,9 +488,6 @@ class MultiBodySystem:
 
 
 
-
-
-
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
 
@@ -393,8 +495,8 @@ class MultiBodySystem:
 
         Φ_norm = np.linalg.norm(Φ)
         Φ_norm2 = np.linalg.norm(Φ2)
-        Φ_norm_h = np.linalg.norm(Φ_h)
-        #print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}  Driver2 = {Φ_norm2:.2e}    Constraint = {Φ_norm_h:.2e}")
+        Φ_normh = np.linalg.norm(Φ_h)
+        print(f"Time = {t:.4f}   Driver = {Φ_norm:.2e}  Driver2 = {Φ_norm2:.2e} Holding = {Φ_normh:.2e}")
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
         return state_dot, V_f
@@ -573,6 +675,10 @@ class MultiBodySystem:
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for driver simulation.")
                 return self.get_state_dot_driver(t, state, V_base, A_base, BG_params)
+            elif config == "driver2":
+                if BG_params is None:
+                    raise ValueError("BG_params must be provided for driver simulation.")
+                return self.get_state_dot_driver2(t, state, V_base, A_base, BG_params)
             elif config == "driver_bottom":
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for driver simulation.")
@@ -639,13 +745,13 @@ class MultiBodySystem:
             omega[k] = cRp @ omega[k+1] @ link_k.RBT @ pRc @ tau_bar[k]
         
         #assigning calculated omegas
-        omega_nn_m1 = omega[n-1]
+        omega_nn2 = gamma[n-1]
         omega_nn = gamma[n]
         omega_n1 = omega[1]
         omega_1n = omega_n1.T
         omega_11 = gamma[1]
 
-        return omega_nn, omega_n1, omega_1n, omega_11, omega_nn_m1
+        return omega_nn, omega_n1, omega_1n, omega_11, omega_nn2
   
     def beta_dot_delta(self,theta_list,tau_bar,D,f_c,G,n):
         #shifting indexing for convience (same method as in run_ATBI)
@@ -653,13 +759,14 @@ class MultiBodySystem:
 
         theta = [None]*(n+2)
         links = [None]*(n+2) 
-
+        
         for i in range(1, n+1):
             theta[i] = theta_list[i-1]
             links[i] = self.links[i-1]
 
         theta[0]   = np.zeros_like(theta[1])
         theta[n+1] = np.zeros_like(theta[n])
+        links[0] = links[1] # For initialization, but doesn't matter, bc tau_bar is all zeros
 
         #storage
         xi_delta = [None]*(n+2)
@@ -674,7 +781,7 @@ class MultiBodySystem:
         #gather pass
         for k in range(1,n+1):
             #rotations
-            pRc = links[k].joint.get_spatial_rotation(theta[k-1]) #i tvivl om k el k-1 her :)
+            pRc = links[k-1].joint.get_spatial_rotation(theta[k-1])
             cRp = pRc.T
 
             xi_delta[k] = links[k].RBT @ pRc @ tau_bar[k-1] @ xi_delta[k-1] - f_c[k]
