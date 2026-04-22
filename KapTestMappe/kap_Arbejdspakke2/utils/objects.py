@@ -351,9 +351,8 @@ class MultiBodySystem:
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
         Φ_norm = np.linalg.norm(Φ)
-        Φ_norm2 = np.linalg.norm(Φ2)
         Φ_norm_h = np.linalg.norm(Φ_h)
-        #print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}  Driver2 = {Φ_norm2:.2e}    Constraint = {Φ_norm_h:.2e}")
+        #print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}    Constraint = {Φ_norm_h:.2e}")
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
         return state_dot, V_f
