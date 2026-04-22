@@ -44,7 +44,7 @@ A_base[-1] = 9.81
 
 robot.plot_initial_state("closed")
 
-robot.simulate(tspan,V_base,A_base,config="driver2",BG_params=[100,500])
+robot.simulate(tspan,V_base,A_base,config="driver",BG_params=[100,500])
 
 robot.plot_gen_velocities() #<-------- HUSK DET ER I LOCAL FRAME. 
 
