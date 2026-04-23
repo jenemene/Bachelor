@@ -383,7 +383,9 @@ class MultiBodySystem:
         omega_nn, omega_n1, omega_1n, omega_11, omega_diag = self.omega(theta_list,tau_bar,D,n)
 
         #radius for a circle with a pentagon inscribed
-        r = np.linalg.norm(self.links[0].l_hinge) / 1.1756 #assuming all links are equal length. Formula from googling: "pentagon inscribed in a circle formula"
+        #assuming all links are equal length. Formula from googling: "pentagon inscribed in a circle formula"
+        division_term = np.sqrt((5-np.sqrt(5))/2)
+        r = np.linalg.norm(self.links[0].l_hinge) / division_term
 
         #other params
         ω = np.pi #angular velocity of the driver
@@ -399,9 +401,11 @@ class MultiBodySystem:
         #for holding constraint violations
         Φ_circle = [None]*(n+2)
         
+        IRi = np.eye(6) # To initialize rotation scatter
+
         #for loop to constrain bodies to circle motion using bilaterial constraints
-        for i in range(n, 1, -1): #starts at body n, goes down until, and including, body 2. Body 1 will be constrained later.
-            IRi = self.links[i-1].joint.get_spatial_rotation(theta_list[i-1]) #[i-1] because self.links and theta_list starts from 0
+        for i in range(n, 0, -1): #starts at body n, goes down until, and including, body 2. Body 1 will be constrained later.
+            IRi = IRi @ self.links[i-1].joint.get_spatial_rotation(theta_list[i-1]) #[i-1] because self.links and theta_list starts from 0
 
             #calling driver func to get constraint terms
             driver, driver_dot, driver_ddot = self.circle_driver_xz_plane(r, t, ω, center, bias)
@@ -429,7 +433,7 @@ class MultiBodySystem:
             f_c[i] = IRi.T @ f_c_closed_loop_const
             
             #updating bias for next loop
-            bias = bias - 1.2566 #from Gemini, see "https://gemini.google.com/share/6e4f72c34dd2"
+            bias = bias - 2*np.pi/5 #from Gemini, see "https://gemini.google.com/share/6e4f72c34dd2"
 
         
 
@@ -480,8 +484,9 @@ class MultiBodySystem:
         Φ_4 = np.linalg.norm(Φ_circle[4])
         Φ_3 = np.linalg.norm(Φ_circle[3])
         Φ_2 = np.linalg.norm(Φ_circle[2])
+        Φ_1 = np.linalg.norm(Φ_circle[1])
 
-        print(f"t = {t:.3f}     Φ_5 = {Φ_5:.2e}  Φ_4 = {Φ_4:.2e}  Φ_3 = {Φ_3:.2e}  Φ_2 = {Φ_2:.2e}  Φ_51 = {np.linalg.norm(Φ):.2e}")
+        print(f"t = {t:.3f}     Φ_5 = {Φ_5:.2e}  Φ_4 = {Φ_4:.2e}  Φ_3 = {Φ_3:.2e}  Φ_2 = {Φ_2:.2e}  Φ_1 = {Φ_1:.2e}  Φ_51 = {np.linalg.norm(Φ):.2e}")
 
 
         #calculating beta_dot_delta
@@ -656,7 +661,7 @@ class MultiBodySystem:
         Y[:, 0] = state0
 
         # Dynamically route the derivative calculation based on config
-        def ODEfun(t, state, A_base, V_base):
+        def ODEfun(t, state, V_base, A_base):
             if config == "closed":
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for closed-loop simulation.")
@@ -683,10 +688,10 @@ class MultiBodySystem:
             t = tspan[i]
             y = Y[:, i]
 
-            k1, _  = ODEfun(t, y, A_base, V_base)
-            k2, _  = ODEfun(t + dt/2, y + dt/2 * k1, A_base, V_base)
-            k3, _  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, A_base, V_base)
-            k4, _  = ODEfun(t + dt, y + dt * k3, A_base, V_base)
+            k1, _  = ODEfun(t, y, V_base, A_base)
+            k2, _  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
+            k3, _  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
+            k4, _  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
 
             Y[:, i+1] = y + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
 
