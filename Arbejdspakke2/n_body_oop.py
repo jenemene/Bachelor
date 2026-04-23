@@ -51,7 +51,7 @@ A_base[-1] = 9.81 #simulating gravity in z
 
 robot.plot_initial_state(config="closed")
 
-BG = np.array([2000,2500])
+BG = np.array([50,50])
 robot.simulate(tspan, V_base, A_base, config="driver_bottom", BG_params=BG)
 
 #robot.plot_gen_velocities()
