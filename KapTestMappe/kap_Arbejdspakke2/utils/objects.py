@@ -2,6 +2,7 @@ from matplotlib.animation import FuncAnimation
 import numpy as np
 from utils import soa as SOA
 import matplotlib.pyplot as plt
+import time
 
 class Joint:
     def __init__(self):
@@ -649,6 +650,7 @@ class MultiBodySystem:
     
     def simulate(self, tspan, V_base, A_base, config="open", BG_params=None):
         print(f"Simulation started ({config}-loop configuration)")
+        start_time = time.perf_counter()
 
         # Initial configuration
         state0 = self.get_initial_state()
@@ -701,7 +703,9 @@ class MultiBodySystem:
 
         self.result = Y
         self.tspan = tspan
-        print("Simulation finished")
+        end_time = time.perf_counter()
+        elapesed_time = end_time - start_time
+        print(f"Simulation finished. Runtime: {elapesed_time:.2f} s")
 
     def omega(self,theta_list,tau_bar,D,n):
         #storage

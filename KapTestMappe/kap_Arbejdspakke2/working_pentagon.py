@@ -12,7 +12,6 @@ joint3 = ob.SphericalJoint()
 joint2 = ob.SphericalJoint()
 joint1 = ob.SphericalJoint()
 
-
 #adding initial configurations for the base join (make it hang down plus make it adhere to driver)
 quat = SOA.quatfromrev(np.pi+np.pi/5,"y")
 pos = np.array([0.2/1.1756,0,0])
