@@ -36,7 +36,7 @@ robot.add_link(link2)
 robot.add_link(link1)
 
 #parameters for simulation
-tspan = np.arange(0,5,0.001)
+tspan = np.arange(0,5,0.01)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -48,4 +48,4 @@ robot.simulate(tspan,V_base,A_base,config="pentagon",BG_params=[50,50])
 
 robot.plot_gen_velocities() # <-------- HUSK DET ER I LOCAL FRAME.
 
-robot.animation(config="open",step=30)
+robot.animation(config="open",step=1)
