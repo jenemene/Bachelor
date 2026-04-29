@@ -3,6 +3,7 @@ import numpy as np
 from utils import soa as SOA
 import matplotlib.pyplot as plt
 import time
+import cvxpy as cp
 
 class Joint:
     def __init__(self):
@@ -593,74 +594,65 @@ class MultiBodySystem:
         #compute positions
         positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
 
-        l_IO1 = positions[1]
-        IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
-        link1 = self.links[0]
-        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
+        link = self.links[n-1]
+        l_IO1 = positions[n]
+        #IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
+        IR1 = link.joint.get_spatial_rotation(theta_list[-1])
+        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[n][:3])
     
-        Φ_f = (l_IO1 + IR1[:3, :3]@link1.l_hinge)
-        Φ_f = -0.1 - Φ_f[2]
-        Φ_dot_f = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge)
-        Φ_dot_f = Φ_dot_f[2]
-        Φ_ddot_f = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge)
-        Φ_ddot_f = Φ_ddot_f[2]
+        Φ_f = (l_IO1 + IR1[:3, :3]@link.l_hinge)
+        Φ_f = Φ_f[0] + 0.1
+        Φ_dot_f = (IR1[:3, :3]@V_f[n][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
+        Φ_dot_f = Φ_dot_f[0]
+        Φ_ddot_f = (IR1[:3, :3]@A_f[n][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[n][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
+        Φ_ddot_f = Φ_ddot_f[0]
 
         #Q matrix (only constraints on z)
-        Q = np.array([0,0,1,0,0,0]).reshape(1,6)
+        Q = np.array([0,0,0,1,0,0]).reshape(1,6)
 
         #OPERTATIONAL SPACE INERTIA
         omega_diag, _, _ = self.omega(theta_list,tau_bar,D,n)
-        Λ_11 = IR1 @ (link1.RBT.T @ omega_diag[1] @ link1.RBT) @IR1.T
+        Λ_11 = IR1 @ (link.RBT.T @ omega_diag[n] @ link.RBT) @IR1.T
 
         # checking for active state
         # ADD LATER
+        o = 1
+        if o == 1
+            if Φ_f <= 0 and Φ_ddot_f <= 0:
+                M = Q @ Λ_11 @ Q.T
+                d = Φ_ddot_f
 
-        def solve_lcp_pgs(M, q, max_iter=100, tolerance=1e-6):
-            """
-            Solves a Linear Complementarity Problem (LCP) using 
-            Projected Gauss-Seidel.
-            """
-            M = np.atleast_2d(M)
-            q = np.atleast_1d(q)
-            n = np.size(q)
-            z = np.zeros(n)  # Initial guess for impulses
-            
-            for iteration in range(max_iter):
-                z_old = np.copy(z)
+                kp = 1000.0  # Position gain
+                kd = 1000.0   # Velocity gain
                 
-                for i in range(n):
-                    # 1. Calculate the 'delta' or error for this constraint
-                    # We want: M[i,:] @ z + q[i] = 0
-                    # Solve for the change in z[i] specifically
-                    
-                    sum_other_z = np.dot(M[i, :], z) - M[i, i] * z[i]
-                    
-                    # 2. Standard Gauss-Seidel step for z[i]
-                    if M[i, i] != 0:
-                        new_zi = -(q[i] + sum_other_z) / M[i, i]
-                    else:
-                        new_zi = 0.0
-                        
-                    # 3. PROJECTION: This is the 'unilateral' magic.
-                    # Impulse can't be negative (contacts only push, never pull)
-                    z[i] = max(0.0, new_zi)
-                
-                # Check for convergence
-                if np.linalg.norm(z - z_old) < tolerance:
-                    break
-                    
-            return z
+                # Modified 'd' to account for penetration and approach velocity
+                d_stabilized = Φ_ddot_f + kd * Φ_dot_f + kp * Φ_f
+                λ = -d_stabilized/M
 
-        M = Q @ Λ_11 @ Q.T
-        q = Φ_ddot_f
-        if Φ_f < 0.000001:
-            λ = solve_lcp_pgs(M,q)
+                # lam = cp.Variable(1)
+                # prob = cp.Problem(cp.Minimize(0.5 * lam * M * lam + d * lam),[lam >= 0])
+                # prob.solve()
+                # λ = lam.value
+            else:
+                λ = np.array([0])
         else:
-            λ = np.array([0])
+            M = Q @ Λ_11 @ Q.T
+            d = Φ_ddot_f
+
+            kp = 1000.0  # Position gain
+            kd = 1000.0   # Velocity gain
+            
+            # Modified 'd' to account for penetration and approach velocity
+            d_stabilized = Φ_ddot_f + kd * Φ_dot_f + kp * Φ_f
+            λ = -d_stabilized/M
         
+        #print(f"t = {t:.2f}     Φ = {Φ_f:.2e}   Φ_ddot_f = {Φ_ddot_f:.2e}   M = {M}     λ = {λ}")
+
         f_c = [np.zeros(6,) for _ in range(n+2)]
         f_c_closed_loop_const = -Q.T@λ
-        f_c[1] = f_c[1] + link1.RBT @ IR1.T @ f_c_closed_loop_const 
+        f_c[n] = link.RBT @ IR1.T @ f_c_closed_loop_const
+        f_c[n] = f_c[n].flatten()
+        #print(f_c_closed_loop_const)
 
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
