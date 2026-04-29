@@ -190,7 +190,7 @@ def initial_config(n):
     return state0
 
 
-n_bodies = 2
+n_bodies = 5
 
 start = time.perf_counter()
 
