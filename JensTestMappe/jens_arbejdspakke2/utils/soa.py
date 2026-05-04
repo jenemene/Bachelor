@@ -381,6 +381,24 @@ def get_rotation_tip_to_body_I(theta_list, links, n):
 
     return R
 
+def get_rotation_body_to_I(theta_list, links, n, body_index):
+    #kan nok godt slåes sammen med den ovenfor :)
+    """
+    Computes the rotation from a specific body to the inertial frame I.
+    body_index: 1-based index (1 is the tip, n is the base connected to I).
+    """
+    R_total = np.eye(3) 
+
+    # Chain from body_index up to n (Inertial frame)
+    for k in range(body_index - 1, n): 
+        pRc = links[k].joint.get_spatial_rotation(theta_list[k])[:3, :3]
+        R_total = pRc @ R_total
+
+    R = np.block([[R_total, np.zeros((3,3))],
+                  [np.zeros((3,3)),R_total]])
+
+    return R
+
 def compute_pos_in_inertial_frame(theta_list, links, n):
 
     positions = [None]*(n+1)
