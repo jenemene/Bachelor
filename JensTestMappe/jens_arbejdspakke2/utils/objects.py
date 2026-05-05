@@ -96,7 +96,11 @@ class Link:
         l = np.linalg.norm(l_hinge)
         w = l/50 # Width and height are 1/50th of the length. This is an arbitrary choice to give the link some thickness without dominating the inertia.
         h = w
-        self.J_c = np.diag([1/12*self.m*(h**2 + w**2), 1/12*self.m*(l**2 + h**2), 1/12*self.m*(l**2 + w**2)])
+        self.J_c = np.diag([
+        1/12 * self.m * (h**2 + l**2), 
+        1/12 * self.m * (w**2 + l**2), 
+        1/12 * self.m * (w**2 + h**2)
+        ])
 
         self.M_c =  np.block([[self.J_c, np.zeros((3,3))],
                           [np.zeros((3,3)), self.m*np.eye(3)]])
