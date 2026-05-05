@@ -8,12 +8,14 @@ import time
 robot = ob.MultiBodySystem()
 
 #defining joints
+
 joint3 = ob.SphericalJoint()
 joint2 = ob.SphericalJoint()
 joint1 = ob.SphericalJoint()
 
 
 #intialziing such that pendulum is hanging to the right
+
 joint3.q_init = SOA.quatfromrev(0.5*np.pi, "y")
 joint2.q_init = SOA.quatfromrev(2*np.pi/3, "y")
 joint1.q_init = SOA.quatfromrev(2*np.pi/3, "y")
@@ -44,4 +46,8 @@ robot.simulate(tspan,V_base,A_base,"multiple_constraints",BG_params=[100,500])
 
 #robot.plot_gen_velocities()
 
-robot.animation(config="closed",step=30)
+robot.animation(config="closed",step=1)
+
+# -- hvis man vil have den lidt ude (husk da også at lav et +0.1 i constrainten selv) -- 
+#joint3 = ob.FreeJoint()
+#joint3.q_init = np.hstack([SOA.quatfromrev(0.5*np.pi, "y"),np.array([0.1,0,0])]) 
