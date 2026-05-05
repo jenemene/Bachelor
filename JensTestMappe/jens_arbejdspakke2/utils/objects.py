@@ -100,7 +100,7 @@ class Link:
         1/12 * self.m * (h**2 + l**2), 
         1/12 * self.m * (w**2 + l**2), 
         1/12 * self.m * (w**2 + h**2)
-        ])
+        ]) #nakket fra wikipedia.
 
         self.M_c =  np.block([[self.J_c, np.zeros((3,3))],
                           [np.zeros((3,3)), self.m*np.eye(3)]])
