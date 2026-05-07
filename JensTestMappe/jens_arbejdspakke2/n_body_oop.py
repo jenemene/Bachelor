@@ -35,7 +35,7 @@ A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 robot.plot_initial_state("open")
 
 
-robot.simulate(tspan,V_base,A_base,"driver_bottom",BG_params=[100,100])
+robot.simulate(tspan,V_base,A_base,"driver_bottom",BG_params=[100,500])
 
 
 #robot.plot_gen_velocities()

@@ -804,9 +804,15 @@ class MultiBodySystem:
         Φ_BG = SOA.baumgarte_stab(Φ_system, Φ_dot_system, Φ_ddot_system, α, β)
         print(np.linalg.norm(Φ_system))
         #solving for lagrange multipliers
-        #λ = -np.linalg.solve((Q@Λ_block@Q.T),f)
-        
-        λ = -np.linalg.lstsq((Q_sys @ Λ_sys @ Q_sys.T),  Φ_BG, rcond=None)[0]
+        # Add a microscopic damping factor to the diagonal to guarantee invertibility
+        epsilon = 0*1e-6
+        M_eff = Q_sys @ Λ_sys @ Q_sys.T
+        M_eff += epsilon * np.eye(M_eff.shape[0])
+
+# Now solve will NEVER crash, even if over-constrained!
+        λ = -np.linalg.solve(M_eff, Φ_BG)
+    
+        #λ = -np.linalg.lstsq((Q_sys @ Λ_sys @ Q_sys.T),  Φ_BG, rcond=None)[0]
 
         #calculating f_c
         f_const = -Q_sys.T@λ
