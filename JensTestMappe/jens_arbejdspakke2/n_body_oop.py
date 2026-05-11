@@ -39,5 +39,6 @@ robot.simulate(tspan,V_base,A_base,"driver_bottom",BG_params=[100,500])
 
 
 #robot.plot_gen_velocities()
+robot.plot_gen_accelerations(self, config="open", V_base=None, A_base=A_base, BG_params=None)
 
 robot.animation(config="closed",step=60)

@@ -18,27 +18,17 @@ joint1 = ob.SphericalJoint()
 
 joint3.q_init = SOA.quatfromrev(0.5*np.pi, "y")
 #defining link
-link3 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint3)
-link2 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint2)
+link3 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint3)
+link2 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint2)
 link1 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint1)
 
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
 robot.add_link(link3)
 robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link1)
 
 #parameters for simulation
-tspan = np.arange(0,5,0.01)
+tspan = np.arange(0,10,0.0001)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -51,9 +41,10 @@ robot.plot_initial_state("open")
 robot.simulate(tspan,V_base,A_base,"open",BG_params=[100,500])
 
 
-#robot.plot_gen_velocities()
+robot.plot_gen_velocities()
+robot.plot_gen_accelerations(config="open", V_base=None, A_base=A_base, BG_params=None)
 
-robot.animation(config="open",step=10)
+robot.animation(config="open",step=1)
 robot.check
 
 # -- hvis man vil have den lidt ude (husk da også at lav et +0.1 i constrainten selv) -- 

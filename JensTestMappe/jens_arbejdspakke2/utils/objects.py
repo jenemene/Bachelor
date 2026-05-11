@@ -804,15 +804,10 @@ class MultiBodySystem:
         Φ_BG = SOA.baumgarte_stab(Φ_system, Φ_dot_system, Φ_ddot_system, α, β)
         print(np.linalg.norm(Φ_system))
         #solving for lagrange multipliers
-        # Add a microscopic damping factor to the diagonal to guarantee invertibility
-        epsilon = 0*1e-6
+        
         M_eff = Q_sys @ Λ_sys @ Q_sys.T
-        M_eff += epsilon * np.eye(M_eff.shape[0])
-
-# Now solve will NEVER crash, even if over-constrained!
         λ = -np.linalg.solve(M_eff, Φ_BG)
     
-        #λ = -np.linalg.lstsq((Q_sys @ Λ_sys @ Q_sys.T),  Φ_BG, rcond=None)[0]
 
         #calculating f_c
         f_const = -Q_sys.T@λ
@@ -1033,6 +1028,10 @@ class MultiBodySystem:
                 return self.get_state_dot_unilateral_constraints(t, state, V_base, A_base)
             elif config == "multiple_constraints":
                 return self.get_state_dot_multiple_constraints(t, state, V_base, A_base, BG_params)
+            elif config == "wall_contact":
+                if BG_params is None:
+                    raise ValueError("BG_params must be provided for contact simulation.")
+                return self.get_state_dot_wall_contact(t, state, V_base, A_base, BG_params)
             else:
                 raise ValueError("Invalid config. Choose 'open', 'closed' or 'driver'.")
         
@@ -1414,3 +1413,164 @@ class MultiBodySystem:
         Φ_ddot = np.array([-r * omega**2 * np.cos(omega * t + bias), 0, -r * omega**2 * np.sin(omega * t + bias)])
 
         return Φ, Φ_dot, Φ_ddot
+
+    def get_state_dot_wall_contact(self, t, state, V_base, A_base, BG_params):
+        theta_list, beta_list = self.unpack_state(state)
+        n = len(self.links)
+
+        # 1. Unconstrained Dynamics 
+        damping = 0.0
+        tau_list = [-damping * beta for beta in beta_list]
+
+        theta_dot_list = []
+        for i in range(len(self.links)):
+            theta_dot = self.links[i].joint.get_derrivative(theta_list[i], beta_list[i])
+            theta_dot_list.append(theta_dot)
+
+        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list, beta_list, tau_list, V_base, A_base)
+
+        # 2. Get global positions and Omega diagonals
+        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+        omega_diag = self.get_omega_diag(theta_list, tau_bar, D, n)
+        
+# 3. THE SCANNER: Universal Contact Logic
+        penetrating_indices = []
+        contact_data = {}
+        
+        # DEFINE YOUR WALL HERE
+        
+        wall_pos = np.array([0.0, 0.0, -2])
+        wall_normal = np.array([0, 0.0, 1]) # Must be normalized!
+        
+        for i in range(1, n+1):
+            link = self.links[i-1]
+            IR_i = SOA.get_rotation_body_to_I(theta_list, self.links, n, i)
+            IR_i_3 = IR_i[:3, :3]
+            
+            # Tip kinematics in global frame
+            tip_pos = positions[i] + IR_i_3 @ link.l_hinge
+            omega_tilde_i = SOA.skewfromvec(IR_i_3 @ V_f[i][:3])
+            tip_vel = IR_i_3 @ V_f[i][3:] + omega_tilde_i @ IR_i_3 @ link.l_hinge
+            tip_acc = IR_i_3 @ A_f[i][3:] + SOA.skewfromvec(IR_i_3 @ A_f[i][:3]) @ IR_i_3 @ link.l_hinge + omega_tilde_i @ omega_tilde_i @ IR_i_3 @ link.l_hinge
+            
+            # THE UNIVERSAL GAP FUNCTION
+            # Dot product inherently handles all positive/negative directional logic!
+            phi = np.dot((tip_pos - wall_pos), wall_normal)
+            
+            # If phi <= 0, the tip has crossed the boundary against the normal
+            if phi <= 0: 
+                penetrating_indices.append(i)
+                
+                # Project velocities and accelerations exactly along the normal
+                contact_data[i] = {
+                    'IR': IR_i,
+                    'phi': phi, 
+                    'phi_dot': np.dot(tip_vel, wall_normal),
+                    'phi_ddot': np.dot(tip_acc, wall_normal),
+                    'link': link
+                }
+
+        # 4. THE ACTIVE SET METHOD (LCP Solver)
+        active_set = list(penetrating_indices)
+        optimal_lambda = None
+        optimal_active_set = []
+        Q_sys = None
+        
+        while True:
+            n_c = len(active_set)
+            
+            if n_c == 0:
+                optimal_lambda = np.zeros(0)
+                optimal_active_set = []
+                break
+                
+            Q_sys = np.zeros((n_c, 6 * n_c))
+            Lambda_sys = np.zeros((6 * n_c, 6 * n_c))
+            Phi_system = np.zeros(n_c)
+            Phi_dot_system = np.zeros(n_c)
+            Phi_ddot_system = np.zeros(n_c)
+            
+            for row, idx_i in enumerate(active_set):
+                data_i = contact_data[idx_i]
+                link_i = data_i['link']
+                IR_i = data_i['IR']
+                
+                # The Q matrix strictly takes the normal vector components
+                Q_sys[row, row * 6 + 3] = wall_normal[0]
+                Q_sys[row, row * 6 + 4] = wall_normal[1]
+                Q_sys[row, row * 6 + 5] = wall_normal[2]
+                
+                Phi_system[row] = data_i['phi']
+                Phi_dot_system[row] = data_i['phi_dot']
+                Phi_ddot_system[row] = data_i['phi_ddot']
+                
+                for col, idx_j in enumerate(active_set):
+                    data_j = contact_data[idx_j]
+                    link_j = data_j['link']
+                    IR_j = data_j['IR']
+                    
+                    idx_min = min(idx_i, idx_j)
+                    idx_max = max(idx_i, idx_j)
+                    link_min = self.links[idx_min - 1]
+                    link_max = self.links[idx_max - 1]
+                    
+                    # We ONLY need the IR of the minimum index, because Omega 
+                    # has already rotated everything down into this frame!
+                    IR_min = contact_data[idx_min]['IR'] 
+                    
+                    Omega_max_min = self.get_omega_ij(idx_max, idx_min, theta_list, tau_bar, omega_diag, n)
+                    
+                    if idx_i == idx_j:
+                        # Diagonal: Everything lives in its own frame
+                        Lambda_block = IR_i @ (link_i.RBT.T @ Omega_max_min @ link_i.RBT) @ IR_i.T
+                        
+                    elif idx_i > idx_j: 
+                        # i is max, j is min
+                        # Omega outputs in frame min. We strictly use IR_min to get to global!
+                        Lambda_block = IR_min @ (link_max.RBT.T @ Omega_max_min @ link_min.RBT) @ IR_min.T
+                        
+                    else: 
+                        # idx_i < idx_j
+                        # i is min, j is max
+                        # It is the mathematical transpose of the block above.
+                        Lambda_block = IR_min @ (link_min.RBT.T @ Omega_max_min.T @ link_max.RBT) @ IR_min.T
+
+                    Lambda_sys[row*6:(row+1)*6, col*6:(col+1)*6] = Lambda_block
+                    
+            alpha, beta_param = BG_params
+            Phi_BG = SOA.baumgarte_stab(Phi_system, Phi_dot_system, Phi_ddot_system, alpha, beta_param)
+            
+            M_eff = Q_sys @ Lambda_sys @ Q_sys.T
+
+            print(Lambda_sys.shape)
+            
+            lambda_forces = -np.linalg.solve(M_eff, Phi_BG)
+            
+            # PURE LCP CHECK: Because of the dot product, Lambda is universally positive!
+            if np.all(lambda_forces >= -1e-10): 
+                optimal_lambda = lambda_forces
+                optimal_active_set = active_set
+                break
+            else:
+                # If a force is negative, it's an impossible pulling force. Kick it out!
+                min_idx = np.argmin(lambda_forces)
+                active_set.pop(min_idx)
+        # 5. Apply Output Forces to the Engine
+        f_c = [np.zeros(6,) for _ in range(n+2)]
+        
+        if len(optimal_active_set) > 0:
+            f_const = -Q_sys.T @ optimal_lambda
+            for idx, body_idx in enumerate(optimal_active_set):
+                link = contact_data[body_idx]['link']
+                IR_i = contact_data[body_idx]['IR']
+                
+                # Extract the 6D global force vector and shift back to local COM
+                f_body_global = f_const[idx*6 : (idx+1)*6]
+                f_c[body_idx] = link.RBT @ IR_i.T @ f_body_global
+
+        # 6. Correct and Return
+        beta_dot_delta_list = self.beta_dot_delta(theta_list, tau_bar, D, f_c, G, n)
+        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
+        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        return state_dot, V_f
