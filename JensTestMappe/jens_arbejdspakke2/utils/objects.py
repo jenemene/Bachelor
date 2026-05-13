@@ -223,7 +223,9 @@ class MultiBodySystem:
             [Λ_n1, Λ_nn]
         ])
 
-
+        V_tip = IR1@link1.RBT.T@V_f[1]
+        v_tip  = V_tip[3:]
+        v_base = IRn[:3, :3]@V_f[n][3:]
 
         positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
 
@@ -233,7 +235,8 @@ class MultiBodySystem:
         IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
     
         Φ =  -(l_IOn - (l_IO1 + IR1[:3, :3]@link1.l_hinge))
-        Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
+        #Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
+        Φ_dot =   v_tip - v_base
         Φ_ddot =  -(IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge))
 
         # Baumgarte stabilization
@@ -903,17 +906,6 @@ class MultiBodySystem:
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
         return state_dot, V_f
-
-    
-
-
-
-
-        
-        
-
-
-
         
 
     def run_ATBI(self,theta_list,beta_list,tau_list,V_base,A_base):
@@ -1439,8 +1431,8 @@ class MultiBodySystem:
         
         # DEFINE YOUR WALL HERE
         
-        wall_pos = np.array([0.0, 0.0, -2])
-        wall_normal = np.array([0, 0.0, 1]) # Must be normalized!
+        wall_pos = np.array([-0.0, 0.0, 0.0])
+        wall_normal = np.array([1, 0.0, 0]) # Must be normalized!
         
         for i in range(1, n+1):
             link = self.links[i-1]
@@ -1458,7 +1450,7 @@ class MultiBodySystem:
             phi = np.dot((tip_pos - wall_pos), wall_normal)
             
             # If phi <= 0, the tip has crossed the boundary against the normal
-            if phi <= 0: 
+            if phi <= 1e-4: 
                 penetrating_indices.append(i)
                 
                 # Project velocities and accelerations exactly along the normal
@@ -1539,10 +1531,10 @@ class MultiBodySystem:
                     
             alpha, beta_param = BG_params
             Phi_BG = SOA.baumgarte_stab(Phi_system, Phi_dot_system, Phi_ddot_system, alpha, beta_param)
-            
+            print(np.linalg.norm(Phi_system))
             M_eff = Q_sys @ Lambda_sys @ Q_sys.T
 
-            print(Lambda_sys.shape)
+            print(M_eff.shape)
             
             lambda_forces = -np.linalg.solve(M_eff, Phi_BG)
             
@@ -1557,6 +1549,7 @@ class MultiBodySystem:
                 active_set.pop(min_idx)
         # 5. Apply Output Forces to the Engine
         f_c = [np.zeros(6,) for _ in range(n+2)]
+        print
         
         if len(optimal_active_set) > 0:
             f_const = -Q_sys.T @ optimal_lambda

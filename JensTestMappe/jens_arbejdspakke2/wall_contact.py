@@ -14,9 +14,9 @@ joint3FREE = ob.FreeJoint()
 # 3. Initialization setup
 # Link local vectors are [0, 0, L]. To make it hang straight down (-Z), 
 # we rotate the base joint 180 degrees (pi) around the Y-axis.
-joint1.q_init = SOA.quatfromrev(0.0, "y")
-joint2.q_init = SOA.quatfromrev(0.0, "y")
-joint3.q_init = SOA.quatfromrev(3/4*np.pi, "y")
+joint1.q_init = SOA.quatfromrev(-np.pi/8, "y")
+joint2.q_init = SOA.quatfromrev(-np.pi/8, "y")
+joint3.q_init = SOA.quatfromrev(3/5*np.pi, "y")
 joint3FREE.q_init = np.hstack([SOA.quatfromrev(2/4*np.pi, "y"),np.array([0.0,0,0])]) 
 
 
@@ -39,14 +39,14 @@ link1 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, L]), joint=joint1)
 
 # 5. Add links (Remember your architecture adds them in reverse order!)
 #robot.add_link(link3)
-robot.add_link(link3FREE)
+robot.add_link(link3)
 robot.add_link(link2)
 robot.add_link(link1)
 robot.add_link(link1)
 
 # 6. Simulation Parameters
 # 3 seconds is plenty of time to see it swing, hit the wall, and bounce back
-tspan = np.arange(0, 3.0, 0.0001) 
+tspan = np.arange(0, 10.0, 0.001) 
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -57,7 +57,7 @@ robot.plot_initial_state("open")
 
 print("Running Unilateral Wall Contact Simulation...")
 # High Baumgarte parameters [alpha, beta] act like a stiff, bouncy spring for the wall
-robot.simulate(tspan, V_base, A_base, "wall_contact", BG_params=[200, 200])
+robot.simulate(tspan, V_base, A_base, "wall_contact", BG_params=[0, 600])
 
 print("Rendering Animation...")
 # config="open" tells the animator to draw a standard straight chain (no closed loops)

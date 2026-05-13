@@ -28,7 +28,7 @@ robot.add_link(link3)
 robot.add_link(link2)
 
 #parameters for simulation
-tspan = np.arange(0,10,0.0001)
+tspan = np.arange(0,10,0.01)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -42,10 +42,9 @@ robot.simulate(tspan,V_base,A_base,"open",BG_params=[100,500])
 
 
 robot.plot_gen_velocities()
-robot.plot_gen_accelerations(config="open", V_base=None, A_base=A_base, BG_params=None)
+
 
 robot.animation(config="open",step=1)
-robot.check
 
 # -- hvis man vil have den lidt ude (husk da også at lav et +0.1 i constrainten selv) -- 
 #joint3 = ob.FreeJoint()
