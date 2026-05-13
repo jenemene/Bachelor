@@ -4,6 +4,7 @@ from utils import soa as SOA
 import matplotlib.pyplot as plt
 import time
 import cvxpy as cp
+import csv
 
 class Joint:
     def __init__(self):
@@ -617,7 +618,7 @@ class MultiBodySystem:
         # checking for active state
         # ADD LATER
         o = 1
-        if o == 1
+        if o == 1:
             if Φ_f <= 0 and Φ_ddot_f <= 0:
                 M = Q @ Λ_11 @ Q.T
                 d = Φ_ddot_f
@@ -663,7 +664,6 @@ class MultiBodySystem:
 
         return state_dot, V_f
         
-
     def run_ATBI(self,theta_list,beta_list,tau_list,V_base,A_base):
         n = len(self.links)
 
@@ -734,6 +734,7 @@ class MultiBodySystem:
             A_plus = cRp @ links[k].RBT.T @ A[k+1]
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
+        
         return beta_dot[1:n+1], V, A, tau_bar, D, G
     
     def simulate(self, tspan, V_base, A_base, config="open", BG_params=None):
@@ -749,6 +750,8 @@ class MultiBodySystem:
 
         Y = np.zeros((nq, nt))
         Y[:, 0] = state0
+        self.V = [None]*nt
+
 
         # Dynamically route the derivative calculation based on config
         def ODEfun(t, state, V_base, A_base):
@@ -780,7 +783,9 @@ class MultiBodySystem:
             t = tspan[i]
             y = Y[:, i]
 
-            k1, _  = ODEfun(t, y, V_base, A_base)
+            k1, V_val  = ODEfun(t, y, V_base, A_base)
+            self.V[i] = V_val
+
             k2, _  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
             k3, _  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
             k4, _  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
@@ -790,6 +795,10 @@ class MultiBodySystem:
             # Robust way to print every 1 second of simulation time
             if t % 1 < dt: 
                 print(f"t = {t:.2f} s")
+
+        # Calc last V entry
+        _, V_last = ODEfun(tspan[-1], Y[:,-1], V_base, A_base)
+        self.V[-1] = V_last
 
         self.result = Y
         self.tspan = tspan
@@ -1096,3 +1105,131 @@ class MultiBodySystem:
         Φ_ddot = np.array([-r * omega**2 * np.cos(omega * t + bias), 0, -r * omega**2 * np.sin(omega * t + bias)])
 
         return Φ, Φ_dot, Φ_ddot
+    
+    def compute_com_pos_in_inertial_frame(self, theta):
+        n = len(self.links)
+        
+        positions = [None]*(n+1)
+        com_positions = [None]*(n+1)
+
+        R_cumulative = SOA.rotfromquat(theta[-1]) #initial rotation from body n to inertial frame
+
+        #BC for position of base body
+        positions[n] = np.zeros(3)
+        com_positions[n] = R_cumulative @ self.links[n-1].l_com
+
+        for i in range(n-1,0,-1):
+            pRc = SOA.rotfromquat(theta[i])
+
+            positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge
+            
+            R_cumulative = R_cumulative @ pRc
+
+            com_positions[i] = positions[i] + R_cumulative @ self.links[i-1].l_com
+
+        return com_positions
+
+    def calc_energies(self, z0):
+        # Colab between Kap and Gemini
+        """
+        Calculates the kinetic, potential, and total energy of the system for all time steps.
+        Saves the results as 1D numpy arrays in self.KE, self.PE, and self.TE.
+        
+        Args:
+            z0: A scalar or list of length n, specifying the potential energy reference offset for each body.
+        """
+        if self.result is None:
+            raise ValueError("Simulation must be run before calculating energies.")
+            
+        n = len(self.links)
+        if np.isscalar(z0):
+            z0 = [z0] * n
+        elif len(z0) != n:
+            raise ValueError(f"z0 must be of length {n} (one offset per link)")
+            
+        nt = len(self.tspan)
+        self.KE = np.zeros(nt)
+        self.PE = np.zeros(nt)
+        self.TE = np.zeros(nt)
+        
+        g = 9.81
+        
+        for i in range(nt):
+            # Initalization for each timestep
+            KE_t = 0.0
+            PE_t = 0.0
+
+            # Current state
+            state = self.result[:, i]
+            theta_list, _ = self.unpack_state(state)            
+            
+            # Compute com positions of hinges in the inertial frame
+            com_pos = self.compute_com_pos_in_inertial_frame(theta_list)
+            
+            if i == 1:
+                print(len(self.V[i]))
+                print(self.V[i])
+
+            for k in range(n, 0, -1):
+                link = self.links[k-1]
+                
+                # Kinetic Energy for this link (0.5 * V.T * M * V)
+                Vk = self.V[i][k]
+                KE_t += 0.5 * (Vk.T @ link.M @ Vk)
+                
+                # Potential Energy for this link (m * g * h)
+                zk_pot = com_pos[k][-1] + z0[k-1]  # z-coordinate + offset
+                PE_t += link.m * g * zk_pot
+                    
+            self.KE[i] = KE_t
+            self.PE[i] = PE_t
+            self.TE[i] = KE_t + PE_t
+        
+        print("Energies calculated!")
+
+    def CSV_creator(self, path, filename, *attr_names):
+        # Made mainly by Gemini
+        """
+        Merges an arbitrary number of attributes (lists/arrays stored in self) 
+        into a CSV file, where each attribute represents a column. 
+        Raises a ValueError if the attributes do not have the same number of rows.
+        """
+        
+        if not attr_names:
+            print("No attribute names provided.")
+            return
+            
+        extracted_lists = []
+        for name in attr_names:
+            if not hasattr(self, name):
+                raise AttributeError(f"The system does not have an attribute named '{name}'.")
+            
+            arr = np.asarray(getattr(self, name))
+            if arr.ndim == 1:
+                arr = arr.reshape(-1, 1)
+            extracted_lists.append(arr)
+            
+        expected_length = extracted_lists[0].shape[0]
+        
+        for i in range(len(extracted_lists)):
+            if extracted_lists[i].shape[0] != expected_length:
+                # Automatically transpose wide arrays (like self.result) to match expected row count
+                if extracted_lists[i].ndim == 2 and extracted_lists[i].shape[1] == expected_length:
+                    extracted_lists[i] = extracted_lists[i].T
+                else:
+                    raise ValueError(f"Attribute '{attr_names[i]}' has {extracted_lists[i].shape[0]} rows, expected {expected_length}.")
+                
+        if not filename.endswith('.csv'):
+            filename += '.csv'
+            
+        # Combine arrays horizontally to support multiple columns per array
+        combined_data = np.hstack(extracted_lists)
+        
+        # Combine path and filename
+        path_filename = path + "/" + filename
+        
+        with open(path_filename, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerows(combined_data)
+            
+        print(f"Data successfully saved as {filename} in {path}.")
