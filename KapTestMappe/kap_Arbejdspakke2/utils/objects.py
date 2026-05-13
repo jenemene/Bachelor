@@ -3,7 +3,6 @@ import numpy as np
 from utils import soa as SOA
 import matplotlib.pyplot as plt
 import time
-import cvxpy as cp
 import csv
 
 class Joint:
@@ -97,7 +96,11 @@ class Link:
         l = np.linalg.norm(l_hinge)
         w = l/50 # Width and height are 1/50th of the length. This is an arbitrary choice to give the link some thickness without dominating the inertia.
         h = w
-        self.J_c = np.diag([1/12*self.m*(h**2 + w**2), 1/12*self.m*(l**2 + h**2), 1/12*self.m*(l**2 + w**2)])
+        self.J_c = np.diag([
+        1/12 * self.m * (h**2 + l**2), 
+        1/12 * self.m * (w**2 + l**2), 
+        1/12 * self.m * (w**2 + h**2)
+        ]) #nakket fra wikipedia.
 
         self.M_c =  np.block([[self.J_c, np.zeros((3,3))],
                           [np.zeros((3,3)), self.m*np.eye(3)]])
@@ -1112,20 +1115,20 @@ class MultiBodySystem:
         positions = [None]*(n+1)
         com_positions = [None]*(n+1)
 
-        R_cumulative = SOA.rotfromquat(theta[-1]) #initial rotation from body n to inertial frame
+        R_cumulative = SOA.rotfromquat(theta[n-1]) #initial rotation from body n to inertial frame
 
         #BC for position of base body
         positions[n] = np.zeros(3)
         com_positions[n] = R_cumulative @ self.links[n-1].l_com
 
         for i in range(n-1,0,-1):
-            pRc = SOA.rotfromquat(theta[i])
+            pRc = SOA.rotfromquat(theta[i-1]) # bc theta starts from 0
 
-            positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge
+            positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge # self.links start from 0...
             
             R_cumulative = R_cumulative @ pRc
 
-            com_positions[i] = positions[i] + R_cumulative @ self.links[i-1].l_com
+            com_positions[i] = positions[i] + R_cumulative @ self.links[i-1].l_com # self.links start from 0...
 
         return com_positions
 
@@ -1138,15 +1141,18 @@ class MultiBodySystem:
         Args:
             z0: A scalar or list of length n, specifying the potential energy reference offset for each body.
         """
+
+        n = len(self.links)
+        
         if self.result is None:
             raise ValueError("Simulation must be run before calculating energies.")
             
-        n = len(self.links)
-        if np.isscalar(z0):
-            z0 = [z0] * n
-        elif len(z0) != n:
+        if len(z0) != n:
             raise ValueError(f"z0 must be of length {n} (one offset per link)")
-            
+        
+        # Adjust for indexing
+        z0 = np.insert(z0, 0, 0)
+
         nt = len(self.tspan)
         self.KE = np.zeros(nt)
         self.PE = np.zeros(nt)
@@ -1165,10 +1171,6 @@ class MultiBodySystem:
             
             # Compute com positions of hinges in the inertial frame
             com_pos = self.compute_com_pos_in_inertial_frame(theta_list)
-            
-            if i == 1:
-                print(len(self.V[i]))
-                print(self.V[i])
 
             for k in range(n, 0, -1):
                 link = self.links[k-1]
@@ -1178,7 +1180,7 @@ class MultiBodySystem:
                 KE_t += 0.5 * (Vk.T @ link.M @ Vk)
                 
                 # Potential Energy for this link (m * g * h)
-                zk_pot = com_pos[k][-1] + z0[k-1]  # z-coordinate + offset
+                zk_pot = com_pos[k][-1] + z0[k]  # z-coordinate + offset
                 PE_t += link.m * g * zk_pot
                     
             self.KE[i] = KE_t
