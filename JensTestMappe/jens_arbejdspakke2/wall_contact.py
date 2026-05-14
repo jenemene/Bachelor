@@ -41,8 +41,8 @@ link1 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, L]), joint=joint1)
 #robot.add_link(link3)
 robot.add_link(link3)
 robot.add_link(link2)
-robot.add_link(link1)
-robot.add_link(link1)
+#robot.add_link(link1)
+#robot.add_link(link1)
 
 # 6. Simulation Parameters
 # 3 seconds is plenty of time to see it swing, hit the wall, and bounce back
@@ -57,7 +57,7 @@ robot.plot_initial_state("open")
 
 print("Running Unilateral Wall Contact Simulation...")
 # High Baumgarte parameters [alpha, beta] act like a stiff, bouncy spring for the wall
-robot.simulate(tspan, V_base, A_base, "wall_contact", BG_params=[0, 600])
+robot.simulate(tspan, V_base, A_base, "wall_contact", BG_params=[0, 200])
 
 print("Rendering Animation...")
 # config="open" tells the animator to draw a standard straight chain (no closed loops)
