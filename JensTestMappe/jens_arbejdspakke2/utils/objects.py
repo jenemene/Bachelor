@@ -3,7 +3,8 @@ import numpy as np
 from utils import soa as SOA
 import matplotlib.pyplot as plt
 import time
-import cvxpy as cp
+import csv
+from scipy.integrate import solve_ivp
 
 class Joint:
     def __init__(self):
@@ -217,7 +218,7 @@ class MultiBodySystem:
         Λ_n1 = IR1 @ (omega_n1 @ link1.RBT) @ IR1.T
 
         
-
+    
         Λ_block = np.block([
             [Λ_11, Λ_n1.T],
             [Λ_n1, Λ_nn]
@@ -907,7 +908,6 @@ class MultiBodySystem:
 
         return state_dot, V_f
         
-
     def run_ATBI(self,theta_list,beta_list,tau_list,V_base,A_base):
         n = len(self.links)
 
@@ -980,7 +980,7 @@ class MultiBodySystem:
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
         return beta_dot[1:n+1], V, A, tau_bar, D, G
     
-    def simulate(self, tspan, V_base, A_base, config="open", BG_params=None):
+    def simulate(self, tspan, V_base, A_base, config="open", BG_params=None,Penalty_params=None):
         print(f"Simulation started ({config}-loop configuration)")
         start_time = time.perf_counter()
 
@@ -993,7 +993,87 @@ class MultiBodySystem:
 
         Y = np.zeros((nq, nt))
         Y[:, 0] = state0
+        self.V = [None]*nt #to be able to save spatial velocities
+        self.beta_dot = [None]*nt
+        # Dynamically route the derivative calculation based on config
+        def ODEfun(t, state, V_base, A_base):
+            if config == "closed":
+                if BG_params is None:
+                    raise ValueError("BG_params must be provided for closed-loop simulation.")
+                return self.get_state_dot_closed(t, state, V_base, A_base, BG_params)
+            elif config == "open":
+                return self.get_state_dot(t, state, V_base, A_base)
+            elif config == "driver":
+                if BG_params is None:
+                    raise ValueError("BG_params must be provided for driver simulation.")
+                return self.get_state_dot_driver(t, state, V_base, A_base, BG_params)
+            elif config == "pentagon":
+                if BG_params is None:
+                    raise ValueError("BG_params must be provided for driver simulation.")
+                return self.get_state_dot_driver_pentagon(t, state, V_base, A_base, BG_params)
+            elif config == "driver_bottom":
+                if BG_params is None:
+                    raise ValueError("BG_params must be provided for driver simulation.")
+                return self.get_state_dot_driver_bottom(t, state, V_base, A_base, BG_params)
+            elif config == "driver_debug":
+                return self.get_state_dot_driver_debug(t, state, V_base, A_base, BG_params)
+            elif config == "unilateral_constraints":
+                return self.get_state_dot_unilateral_constraints(t, state, V_base, A_base)
+            elif config == "multiple_constraints":
+                return self.get_state_dot_multiple_constraints(t, state, V_base, A_base, BG_params)
+            elif config == "wall_contact":
+                if BG_params is None:
+                    raise ValueError("BG_params must be provided for contact simulation.")
+                return self.get_state_dot_wall_contact(t, state, V_base, A_base, BG_params)
+            elif config == "wall_penalty":
+                if Penalty_params is None: # You can pass this through the BG_params argument or make a new one
+                    raise ValueError("penalty_params (k, c) must be provided.")
+                return self.get_state_dot_wall_penalty(t, state, V_base, A_base, Penalty_params)
+            elif config == "wall_penalty_CL":
+                return self.get_state_dot_closed_penalty(t, state, V_base, A_base, BG_params, Penalty_params)
+            else:
+                raise ValueError("Invalid config. Choose 'open', 'closed' or 'driver'.")
+        
+        # RK4 integration loop
+        for i in range(nt-1):
+            t = tspan[i]
+            y = Y[:, i]
 
+            k1, V_val  = ODEfun(t, y, V_base, A_base)
+            self.V[i] = V_val
+            self.beta_dot[i] = k1[self.total_nq:]
+
+            k2, _  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
+            k3, _  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
+            k4, _  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
+
+            Y[:, i+1] = y + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
+
+            # Robust way to print every 1 second of simulation time
+            if t % 1 < dt: 
+                print(f"t = {t:.2f} s")
+        # Calc last V entry
+        state_dot_last, V_last = ODEfun(tspan[-1], Y[:,-1], V_base, A_base)
+        self.V[-1] = V_last
+        self.beta_dot[-1] = state_dot_last[self.total_nq:]
+
+        self.result = Y
+        self.tspan = tspan
+        end_time = time.perf_counter()
+        elapesed_time = end_time - start_time
+        print(f"Simulation finished. Runtime: {elapesed_time:.2f} s")
+    def simulate_scipy(self, tspan, V_base, A_base, config="open", BG_params=None, method='RK45', **kwargs):
+        """
+        Simulates the multi-body system using scipy.integrate.solve_ivp.
+        
+        Additional kwargs are passed directly to solve_ivp (e.g., rtol, atol).
+        """
+        print(f"Simulation started ({config}-loop configuration) using SciPy {method}")
+        start_time = time.perf_counter()
+
+        # Initial configuration
+        state0 = self.get_initial_state()
+        
         # Dynamically route the derivative calculation based on config
         def ODEfun(t, state, V_base, A_base):
             if config == "closed":
@@ -1025,30 +1105,52 @@ class MultiBodySystem:
                     raise ValueError("BG_params must be provided for contact simulation.")
                 return self.get_state_dot_wall_contact(t, state, V_base, A_base, BG_params)
             else:
-                raise ValueError("Invalid config. Choose 'open', 'closed' or 'driver'.")
+                raise ValueError("Invalid config. Choose 'open', 'closed', 'driver', etc.")
+
+        # SciPy requires the derivative function to return ONLY dy/dt. 
+        # We wrap ODEfun to discard the 'V' output during the integration steps.
+        def scipy_fun(t, state):
+            state_dot, _ = ODEfun(t, state, V_base, A_base)
+            return state_dot
+
+        # Run integration
+        t_span_tuple = (tspan[0], tspan[-1])
         
-        # RK4 integration loop
-        for i in range(nt-1):
-            t = tspan[i]
-            y = Y[:, i]
+        sol = solve_ivp(
+            fun=scipy_fun,
+            t_span=t_span_tuple,
+            y0=state0,
+            t_eval=tspan,  # Forces SciPy to output exactly at your desired tspan steps
+            method=method,
+            **kwargs
+        )
 
-            k1, _  = ODEfun(t, y, V_base, A_base)
-            k2, _  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
-            k3, _  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
-            k4, _  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
+        if not sol.success:
+            print(f"Integration failed: {sol.message}")
+        
+        # Save results mirroring the custom simulate format
+        self.result = sol.y
+        self.tspan = sol.t
+        nt = len(self.tspan)
+        
+        # Initialize storage for V and beta_dot
+        self.V = [None] * nt
+        self.beta_dot = [None] * nt
+        
+        # Post-processing loop: Re-evaluate ODEfun at the returned states 
+        # to extract V and beta_dot for energy calculations and plotting.
+        for i in range(nt):
+            t_val = self.tspan[i]
+            y_val = self.result[:, i]
+            
+            state_dot, V_val = ODEfun(t_val, y_val, V_base, A_base)
+            
+            self.V[i] = V_val
+            self.beta_dot[i] = state_dot[self.total_nq:]
 
-            Y[:, i+1] = y + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
-
-            # Robust way to print every 1 second of simulation time
-            if t % 1 < dt: 
-                print(f"t = {t:.2f} s")
-
-        self.result = Y
-        self.tspan = tspan
         end_time = time.perf_counter()
-        elapesed_time = end_time - start_time
-        print(f"Simulation finished. Runtime: {elapesed_time:.2f} s")
-
+        elapsed_time = end_time - start_time
+        print(f"Simulation finished. Runtime: {elapsed_time:.2f} s")
     def omega(self,theta_list,tau_bar,D,n):
         #storage
         gamma = [None]*(n+2)
@@ -1125,7 +1227,6 @@ class MultiBodySystem:
         omega_diag = gamma
 
         return omega_diag
-
 
     def get_omega_ij(self, i, j, theta_list, tau_bar, omega_diag,n):
         #calculates off diagonal entries not the MOST efficent as this may recalculate some entires, so essentially we are making more function calls than nessecarry. I right now i cant think of a way to fix this, but i know there is one
@@ -1406,6 +1507,155 @@ class MultiBodySystem:
 
         return Φ, Φ_dot, Φ_ddot
 
+    def compute_com_pos_in_inertial_frame(self, theta):
+        #OBS! SKAL ÆNDRES LÆNGERE OPPE SÅ VI IKKE LÆNGERE BRUGER SOA.PY
+        n = len(self.links)
+        
+        positions = [None]*(n+1)
+        com_positions = [None]*(n+1)
+
+        R_cumulative = SOA.rotfromquat(theta[n-1]) #initial rotation from body n to inertial frame
+
+        #BC for position of base body
+        positions[n] = np.zeros(3)
+        com_positions[n] = R_cumulative @ self.links[n-1].l_com
+
+        for i in range(n-1,0,-1):
+            pRc = SOA.rotfromquat(theta[i-1]) # bc theta starts from 0
+
+            positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge # self.links start from 0...
+            
+            R_cumulative = R_cumulative @ pRc
+
+            com_positions[i] = positions[i] + R_cumulative @ self.links[i-1].l_com # self.links start from 0...
+
+        return com_positions
+
+    def calc_energies(self, z0):
+        # Colab between Kap and Gemini
+        """
+        Calculates the kinetic, potential, and total energy of the system for all time steps.
+        Saves the results as 1D numpy arrays in self.KE, self.PE, and self.TE.
+        
+        Args:
+            z0: A scalar or list of length n, specifying the potential energy reference offset for each body.
+        """
+
+        n = len(self.links)
+        
+        if self.result is None:
+            raise ValueError("Simulation must be run before calculating energies.")
+            
+        if len(z0) != n:
+            raise ValueError(f"z0 must be of length {n} (one offset per link)")
+        
+        # Adjust for indexing
+        z0 = np.insert(z0, 0, 0)
+
+        nt = len(self.tspan)
+        self.KE = np.zeros(nt)
+        self.PE = np.zeros(nt)
+        self.TE = np.zeros(nt)
+        
+        g = 9.81
+        
+        for i in range(nt):
+            # Initalization for each timestep
+            KE_t = 0.0
+            PE_t = 0.0
+
+            # Current state
+            state = self.result[:, i]
+            theta_list, _ = self.unpack_state(state)            
+            
+            # Compute com positions of hinges in the inertial frame
+            com_pos = self.compute_com_pos_in_inertial_frame(theta_list)
+
+            for k in range(n, 0, -1):
+                link = self.links[k-1]
+                
+                # Kinetic Energy for this link (0.5 * V.T * M * V)
+                Vk = self.V[i][k]
+                KE_t += 0.5 * (Vk.T @ link.M @ Vk)
+                
+                # Potential Energy for this link (m * g * h)
+                zk_pot = com_pos[k][-1] + z0[k]  # z-coordinate + offset
+                PE_t += link.m * g * zk_pot
+                    
+            self.KE[i] = KE_t
+            self.PE[i] = PE_t
+            self.TE[i] = KE_t + PE_t
+        
+        print("Energies calculated!")
+
+    def CSV_creator(self, path, filename, *attr_names):
+        # Made mainly by Gemini
+        """
+        Merges an arbitrary number of attributes (lists/arrays stored in self) 
+        into a CSV file, where each attribute represents a column. 
+        Raises a ValueError if the attributes do not have the same number of rows.
+        """
+        
+        if not attr_names:
+            print("No attribute names provided.")
+            return
+            
+        extracted_lists = []
+        for name in attr_names:
+            if not hasattr(self, name):
+                raise AttributeError(f"The system does not have an attribute named '{name}'.")
+            
+            attr_data = getattr(self, name)
+            
+            # Handle lists that might contain mixed elements (e.g., None and arrays)
+            if isinstance(attr_data, list):
+                processed_data = []
+                for row in attr_data:
+                    if isinstance(row, (list, tuple, np.ndarray)):
+                        flat_row = []
+                        for item in row:
+                            if item is None:
+                                continue
+                            elif isinstance(item, (int, float, str, np.number)):
+                                flat_row.append(item)
+                            else:
+                                flat_row.extend(np.asarray(item).flatten().tolist())
+                        processed_data.append(flat_row)
+                    else:
+                        processed_data.append(row)
+                arr = np.asarray(processed_data)
+            else:
+                arr = np.asarray(attr_data)
+                
+            if arr.ndim == 1:
+                arr = arr.reshape(-1, 1)
+            extracted_lists.append(arr)
+            
+        expected_length = extracted_lists[0].shape[0]
+        
+        for i in range(len(extracted_lists)):
+            if extracted_lists[i].shape[0] != expected_length:
+                # Automatically transpose wide arrays (like self.result) to match expected row count
+                if extracted_lists[i].ndim == 2 and extracted_lists[i].shape[1] == expected_length:
+                    extracted_lists[i] = extracted_lists[i].T
+                else:
+                    raise ValueError(f"Attribute '{attr_names[i]}' has {extracted_lists[i].shape[0]} rows, expected {expected_length}.")
+                
+        if not filename.endswith('.csv'):
+            filename += '.csv'
+            
+        # Combine arrays horizontally to support multiple columns per array
+        combined_data = np.hstack(extracted_lists)
+        
+        # Combine path and filename
+        path_filename = path + "/" + filename
+        
+        with open(path_filename, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerows(combined_data)
+            
+        print(f"Data successfully saved as {filename} in {path}.")
+      
     def get_state_dot_wall_contact(self, t, state, V_base, A_base, BG_params):
         theta_list, beta_list = self.unpack_state(state)
         n = len(self.links)
@@ -1565,5 +1815,282 @@ class MultiBodySystem:
         beta_dot_delta_list = self.beta_dot_delta(theta_list, tau_bar, D, f_c, G, n)
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        return state_dot, V_f
+
+    def get_state_dot_wall_penalty(self, t, state, V_base, A_base, penalty_params):
+        """
+        Wall contact using a Compliant Penalty Method (Spring-Damper).
+        penalty_params = (k_stiffness, c_damping)
+        """
+        theta_list, beta_list = self.unpack_state(state)
+        n = len(self.links)
+
+        # 1. Unconstrained Dynamics (Gravity, Coriolis, internal damping)
+        damping = 0.0
+        tau_list = [-damping * beta for beta in beta_list]
+
+        theta_dot_list = []
+        for i in range(len(self.links)):
+            theta_dot = self.links[i].joint.get_derrivative(theta_list[i], beta_list[i])
+            theta_dot_list.append(theta_dot)
+
+        # Run ATBI to get free accelerations and spatial velocities (V_f)
+        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list, beta_list, tau_list, V_base, A_base)
+
+        # 2. Get global positions
+        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+        
+        # Initialize f_c with zeros for all bodies. This will hold our spatial penalty forces.
+        f_c = [np.zeros(6,) for _ in range(n+2)]
+        
+        k_stiffness, c_damping = penalty_params
+        
+        # DEFINE YOUR WALL HERE
+        wall_pos = np.array([-0.0, 0.0, 0.0])
+        wall_normal = np.array([1.0, 0.0, 0.0]) # Must be normalized!
+        
+        contact_detected = False
+
+        # 3. Check for collisions and accumulate penalty forces
+        for i in range(1, n+1):
+            link = self.links[i-1]
+            IR_i = SOA.get_rotation_body_to_I(theta_list, self.links, n, i)
+            IR_i_3 = IR_i[:3, :3]
+            
+            # Tip kinematics in global frame
+            tip_pos = positions[i] + IR_i_3 @ link.l_hinge
+            omega_tilde_i = SOA.skewfromvec(IR_i_3 @ V_f[i][:3])
+            tip_vel = IR_i_3 @ V_f[i][3:] + omega_tilde_i @ IR_i_3 @ link.l_hinge
+            
+            # Distance and velocity along the normal
+            phi = np.dot((tip_pos - wall_pos), wall_normal)
+            phi_dot = np.dot(tip_vel, wall_normal)
+            
+            # If penetrated, apply spring-damper force
+            if phi < 0:
+                contact_detected = True
+                
+                # Penalty Force Model: Spring (k) + Damper (c)
+                # Max(0, ...) ensures the wall only PUSHES, never pulls the pendulum in.
+                F_normal_mag = max(0.0, -k_stiffness * phi - c_damping * phi_dot)
+                
+                # Convert to 3D Force vector in Inertial Frame
+                F_I = F_normal_mag * wall_normal
+                
+                # Spatial Wrench at the tip in Inertial Frame [Torque; Force]
+                W_tip_I = np.concatenate([np.zeros(3), F_I])
+                
+                # Transform wrench to body hinge frame and accumulate.
+                # NOTE: We use -W_tip_I because your beta_dot_delta method naturally subtracts f_c.
+                # By passing negative, the minus signs cancel and we push the pendulum OUT of the wall.
+                f_c_body = link.RBT @ IR_i.T @ (-W_tip_I)
+                f_c[i] = f_c[i] + f_c_body
+
+        # 4. Map spatial forces to joint accelerations using your existing ATBI delta method
+        if contact_detected:
+            beta_dot_delta_list = self.beta_dot_delta(theta_list, tau_bar, D, f_c, G, n)
+            beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
+        else:
+            beta_dot_final_list = beta_dot_f_list
+
+        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        return state_dot, V_f
+    
+    def get_state_dot_closed_penalty(self, t, state, V_base, A_base, BG_params, penalty_params):
+        """
+        Combined configuration: Closed-Loop constraints + Compliant Wall Penalty.
+        """
+        theta_list, beta_list = self.unpack_state(state)
+        n = len(self.links)
+
+        # ==========================================
+        # 1. UNCONSTRAINED DYNAMICS (Gravity, Coriolis)
+        # ==========================================
+        damping = 0.0
+        tau_list = [-damping * beta for beta in beta_list]
+
+        theta_dot_list = []
+        for i in range(len(self.links)):
+            theta_dot = self.links[i].joint.get_derrivative(theta_list[i], beta_list[i])
+            theta_dot_list.append(theta_dot)
+
+        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list, beta_list, tau_list, V_base, A_base)
+
+        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+
+        # ==========================================
+        # 2. SOLID SPROCKET PENALTY FORCES
+        # ==========================================
+        f_c_wall = [np.zeros(6,) for _ in range(n+2)]
+        k_stiffness, c_damping = penalty_params
+        
+        # DEFINE YOUR SPROCKET HERE
+        sprocket_center = np.array([0.0, 0.0, 0.0]) 
+        sprocket_radius = 1.8                       
+        
+        # for i in range(1, n+1):
+        #     link = self.links[i-1]
+        #     IR_i = SOA.get_rotation_body_to_I(theta_list, self.links, n, i)
+        #     IR_i_3 = IR_i[:3, :3]
+            
+        #     # Tip kinematics in global frame
+        #     tip_pos = positions[i] + IR_i_3 @ link.l_hinge
+        #     omega_tilde_i = SOA.skewfromvec(IR_i_3 @ V_f[i][:3])
+        #     tip_vel = IR_i_3 @ V_f[i][3:] + omega_tilde_i @ IR_i_3 @ link.l_hinge
+            
+        #     # --- DYNAMIC NORMAL MATH (INVERTED) ---
+        #     vec_from_center = tip_pos - sprocket_center
+        #     dist = np.linalg.norm(vec_from_center)
+            
+        #     # Gap function: Positive when OUTSIDE the sprocket, negative when inside
+        #     phi = dist - sprocket_radius
+            
+        #     if phi < 0: # Penetration detected!
+                
+        #         # The normal must push the tip OUTWARD, away from the center.
+        #         dynamic_normal = vec_from_center / dist 
+                
+        #         # Penetration velocity along the outward normal
+        #         phi_dot = np.dot(tip_vel, dynamic_normal)
+                
+        #         # Calculate Force (Spring + Damper)
+        #         F_normal_mag = max(0.0, -k_stiffness * phi - c_damping * phi_dot)
+                
+        #         # Convert to 3D Force vector in Inertial Frame
+        #         F_I = F_normal_mag * dynamic_normal
+                
+        #         # Assemble spatial wrench and map to joint
+        #         W_tip_I = np.concatenate([np.zeros(3), F_I])
+        #         f_c_body = link.RBT @ IR_i.T @ (-W_tip_I)
+        #         f_c_wall[i] = f_c_wall[i] + f_c_body
+
+        # ==========================================
+        # 2. MULTI-SPROCKET PENALTY FORCES
+        # ==========================================
+        f_c_wall = [np.zeros(6,) for _ in range(n+2)]
+        k_stiffness, c_damping = penalty_params
+        
+        # DEFINE YOUR SPROCKETS HERE (You can add as many as you want)
+        sprockets = [
+            {'center': np.array([-3.3, 0.0, 0.0]), 'radius': 1.8}, # Left Sprocket
+            {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 1.8}  # Right Sprocket
+        ]
+        
+        for i in range(1, n+1):
+            link = self.links[i-1]
+            IR_i = SOA.get_rotation_body_to_I(theta_list, self.links, n, i)
+            IR_i_3 = IR_i[:3, :3]
+            
+            # Tip kinematics in global frame
+            tip_pos = positions[i] + IR_i_3 @ link.l_hinge
+            omega_tilde_i = SOA.skewfromvec(IR_i_3 @ V_f[i][:3])
+            tip_vel = IR_i_3 @ V_f[i][3:] + omega_tilde_i @ IR_i_3 @ link.l_hinge
+            
+            # Loop through every sprocket in the world
+            for sprocket in sprockets:
+                vec_from_center = tip_pos - sprocket['center']
+                dist = np.linalg.norm(vec_from_center)
+                
+                # Gap function
+                phi = dist - sprocket['radius']
+                
+                if phi < 0: # Penetration detected on this specific sprocket!
+                    
+                    # Outward normal from this sprocket's center
+                    dynamic_normal = vec_from_center / dist 
+                    phi_dot = np.dot(tip_vel, dynamic_normal)
+                    
+                    # Calculate Force
+                    F_normal_mag = max(0.0, -k_stiffness * phi - c_damping * phi_dot)
+                    F_I = F_normal_mag * dynamic_normal
+                    
+                    # Assemble spatial wrench and ADD it to the accumulator
+                    W_tip_I = np.concatenate([np.zeros(3), F_I])
+                    f_c_body = link.RBT @ IR_i.T @ (-W_tip_I)
+                    
+                    # Accumulate forces (handles corner cases where a link hits two things at once)
+                    f_c_wall[i] = f_c_wall[i] + f_c_body
+
+
+        # Calculate joint acceleration changes from the wall
+        delta_beta_wall = self.beta_dot_delta(theta_list, tau_bar, D, f_c_wall, G, n)
+        beta_dot_with_wall = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, delta_beta_wall)]
+
+        # ==========================================
+        # 3. UPDATE SPATIAL ACCELERATIONS (The Trick)
+        # ==========================================
+        # We must propagate the wall's joint accelerations forward to find 
+        # the new Cartesian spatial accelerations before solving closed-loop.
+        A_with_wall = [np.copy(A) for A in A_f] 
+        Delta_A = [np.zeros(6) for _ in range(n+2)]
+        
+        for k in range(n, 0, -1):
+            pRc = self.links[k-1].joint.get_spatial_rotation(theta_list[k-1])
+            cRp = pRc.T
+            
+            Delta_A_plus = cRp @ self.links[k-1].RBT.T @ Delta_A[k+1]
+            Delta_A[k] = Delta_A_plus + self.links[k-1].joint.H.T @ delta_beta_wall[k-1]
+            A_with_wall[k] = A_f[k] + Delta_A[k]
+
+        # ==========================================
+        # 4. EXACT CLOSED-LOOP CONSTRAINTS
+        # ==========================================
+        link1 = self.links[0]
+        linkn = self.links[-1]
+
+        IR1 = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)
+        IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
+
+        d = np.block([np.zeros((3,3)), np.eye(3)])
+        Q = np.block([d, -d])
+
+        omega_diag = self.get_omega_diag(theta_list, tau_bar, D, n)
+        omega_n1 = self.get_omega_ij(n, 1, theta_list, tau_bar, omega_diag, n)
+
+        Λ_11 = IR1 @ (link1.RBT.T @ omega_diag[1] @ link1.RBT) @ IR1.T
+        Λ_nn = IRn @ (omega_diag[n] @ IRn.T)
+        Λ_n1 = IR1 @ (omega_n1 @ link1.RBT) @ IR1.T
+
+        Λ_block = np.block([
+            [Λ_11, Λ_n1.T],
+            [Λ_n1, Λ_nn]
+        ])
+
+        v_tip  = (IR1 @ link1.RBT.T @ V_f[1])[3:]
+        v_base = (IRn @ V_f[n])[3:]
+
+        l_IO1 = positions[1]
+        l_IOn = positions[n]
+
+        IωIO = SOA.skewfromvec(IR1[:3,:3] @ V_f[1][:3])
+    
+        Φ = -(l_IOn - (l_IO1 + IR1[:3, :3] @ link1.l_hinge))
+        Φ_dot = v_tip - v_base
+        
+        # CRITICAL DIFFERENCE: We feed 'A_with_wall' into the closed loop phi_ddot 
+        # instead of 'A_f' so the solver knows the wall is pushing!
+        Φ_ddot = -(IRn[:3, :3] @ A_with_wall[n][3:] - (IR1[:3, :3] @ A_with_wall[1][3:] + SOA.skewfromvec(IR1[:3, :3] @ A_with_wall[1][:3]) @ IR1[:3, :3] @ link1.l_hinge + IωIO @ IωIO @ IR1[:3,:3] @ link1.l_hinge))
+
+        alpha, beta_param = BG_params
+        f_closed = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta_param)
+
+        λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f_closed)
+
+        f_c_closed_loop_const = -Q.T @ λ
+        f_c_closed = [np.zeros(6,) for _ in range(n+2)]
+
+        f_c_closed[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const[:6] 
+        f_c_closed[n] = IRn.T @ f_c_closed_loop_const[6:]
+
+        # Calculate joint acceleration changes from the closed-loop constraints
+        delta_beta_closed = self.beta_dot_delta(theta_list, tau_bar, D, f_c_closed, G, n)
+
+        # ==========================================
+        # 5. ASSEMBLE FINAL STATE
+        # ==========================================
+        beta_dot_final = [b_wall + b_closed for b_wall, b_closed in zip(beta_dot_with_wall, delta_beta_closed)]
+        state_dot = np.concatenate(theta_dot_list + beta_dot_final)
 
         return state_dot, V_f

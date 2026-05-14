@@ -55,18 +55,14 @@ A_base[-1] = 9.81  # Simulating gravity (accelerating the base upwards pushes li
 # 7. Run and Plot
 robot.plot_initial_state("open")
 
-print("Running Unilateral Wall Contact Simulation...")
-# High Baumgarte parameters [alpha, beta] act like a stiff, bouncy spring for the wall
-#robot.simulate(tspan, V_base, A_base, "wall_contact", BG_params=[0, 400])
-robot.simulate_scipy(tspan, V_base, A_base, config="wall_contact", BG_params=(0, 200), method='Radau', rtol=1e-6, atol=1e-9)
-print("Rendering Animation...")
-# config="open" tells the animator to draw a standard straight chain (no closed loops)
+robot.simulate(tspan, V_base, A_base, "wall_penalty", Penalty_params=[10000,0])
+
 robot.animation(config="open", step=20) # step=2 skips frames to make the animation play faster
 
 robot.calc_energies(np.array([L/2,L+L/2,L+L+L/2,L+L+L+L/2]))
 
 path = "JensTestMappe/jens_arbejdspakke2/results"
-file_name = "wall_contact_energies"
+file_name = "WCP_energies"
 robot.CSV_creator(path, file_name, "tspan", "PE", "KE", "TE")
 
 # Uncomment this to see the velocity spike when it hits the wall!
