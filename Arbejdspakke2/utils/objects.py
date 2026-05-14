@@ -96,7 +96,11 @@ class Link:
         l = np.linalg.norm(l_hinge)
         w = l/50 # Width and height are 1/50th of the length. This is an arbitrary choice to give the link some thickness without dominating the inertia.
         h = w
-        self.J_c = np.diag([1/12*self.m*(h**2 + w**2), 1/12*self.m*(l**2 + h**2), 1/12*self.m*(l**2 + w**2)])
+        self.J_c = np.diag([
+        1/12 * self.m * (h**2 + l**2), 
+        1/12 * self.m * (w**2 + l**2), 
+        1/12 * self.m * (w**2 + h**2)
+        ]) #nakket fra wikipedia.
 
         self.M_c =  np.block([[self.J_c, np.zeros((3,3))],
                           [np.zeros((3,3)), self.m*np.eye(3)]])
@@ -135,8 +139,8 @@ class MultiBodySystem:
             theta = state[idx_theta: idx_theta+link.joint.nq]
             
             # # Normalization safety check for quaternions
-            # if link.joint.nq == 4:
-            #     theta = SOA.normalize_quaternions(theta)
+            if link.joint.nq == 4:
+                theta = SOA.normalize_quaternions(theta)
                 
             theta_list.append(theta)
             idx_theta += link.joint.nq 
@@ -642,6 +646,7 @@ class MultiBodySystem:
             A_plus = cRp @ links[k].RBT.T @ A[k+1]
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
+
         return beta_dot[1:n+1], V, A, tau_bar, D, G
     
     def simulate(self, tspan, V_base, A_base, config="open", BG_params=None):
@@ -658,6 +663,7 @@ class MultiBodySystem:
         Y = np.zeros((nq, nt))
         Y[:, 0] = state0
         self.V = [None]*nt #to be able to save spatial velocities
+        self.beta_dot = [None]*nt
 
         # Dynamically route the derivative calculation based on config
         def ODEfun(t, state, V_base, A_base):
@@ -689,10 +695,11 @@ class MultiBodySystem:
 
             k1, V_val  = ODEfun(t, y, V_base, A_base)
             self.V[i] = V_val
+            self.beta_dot[i] = k1[self.total_nq:]
 
-            k2, _  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
-            k3, _  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
-            k4, _  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
+            k2,_  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
+            k3,_  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
+            k4,_  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
 
             Y[:, i+1] = y + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
 
@@ -701,8 +708,9 @@ class MultiBodySystem:
                 print(f"t = {t:.2f} s")
 
         # Calc last V entry
-        _, V_last = ODEfun(tspan[-1], Y[:,-1], V_base, A_base)
+        state_dot_last, V_last = ODEfun(tspan[-1], Y[:,-1], V_base, A_base)
         self.V[-1] = V_last
+        self.beta_dot[-1] = state_dot_last[self.total_nq:]
 
         self.result = Y
         self.tspan = tspan
@@ -1107,7 +1115,28 @@ class MultiBodySystem:
             if not hasattr(self, name):
                 raise AttributeError(f"The system does not have an attribute named '{name}'.")
             
-            arr = np.asarray(getattr(self, name))
+            attr_data = getattr(self, name)
+            
+            # Handle lists that might contain mixed elements (e.g., None and arrays)
+            if isinstance(attr_data, list):
+                processed_data = []
+                for row in attr_data:
+                    if isinstance(row, (list, tuple, np.ndarray)):
+                        flat_row = []
+                        for item in row:
+                            if item is None:
+                                continue
+                            elif isinstance(item, (int, float, str, np.number)):
+                                flat_row.append(item)
+                            else:
+                                flat_row.extend(np.asarray(item).flatten().tolist())
+                        processed_data.append(flat_row)
+                    else:
+                        processed_data.append(row)
+                arr = np.asarray(processed_data)
+            else:
+                arr = np.asarray(attr_data)
+                
             if arr.ndim == 1:
                 arr = arr.reshape(-1, 1)
             extracted_lists.append(arr)
