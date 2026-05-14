@@ -31,7 +31,7 @@ link1 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint1)
 
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
-robot.add_link(link3)
+robot.add_link(link3_fixed)
 robot.add_link(link2)
 robot.add_link(link1)
 
@@ -46,7 +46,7 @@ A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 robot.plot_initial_state("closed")
 
 
-robot.simulate(tspan,V_base,A_base,"multiple_constraints",BG_params=[100,200])
+robot.simulate(tspan,V_base,A_base,"closed",BG_params=[100,200])
 
 
 #robot.plot_gen_velocities()

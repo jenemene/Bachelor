@@ -246,8 +246,8 @@ class MultiBodySystem:
         #solving for lagrange multipliers
         #λ = -np.linalg.solve((Q@Λ_block@Q.T),f)
         
-        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
-
+        λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
+        print(f"{np.linalg.norm(Φ):.1e}")
         #calculating f_c
         f_c_closed_loop_const = -Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
