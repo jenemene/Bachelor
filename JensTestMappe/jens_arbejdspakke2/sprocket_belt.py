@@ -57,7 +57,7 @@ for i in range(N, 0, -1):
     robot.add_link(link)
 
 # --- 4. SIMULATION PARAMETERS ---
-tspan = np.arange(0, 10, 0.001)
+tspan = np.arange(0, 30, 0.005)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -66,14 +66,12 @@ A_base[-1] = 9.81 # Gravity in Z
 # Verify the geometry! You should see a perfect Stadium shape hovering over the sprockets.
 robot.plot_initial_state("closed")
 
-# Run the simulation (Make sure config string matches your combined method)
-# k = 1,000,000 (solid sprockets)
-# c = 2,500 (Critical damping for the lighter 2kg links so it settles smoothly)
+# k = 1,000,000 (solid sprockets). For now c doesnt do anything
 robot.simulate(
     tspan, V_base, A_base, 
     config="wall_penalty_CL", 
-    BG_params=[0, 250], 
-    Penalty_params=[1000000, 2500] 
+    BG_params=[0, 200], 
+    Penalty_params=[100000, 0] 
 )
 
-robot.animation(config="closed", step=20)
+robot.animation(config="closed", step=10)

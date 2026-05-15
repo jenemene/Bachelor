@@ -306,7 +306,7 @@ def adams_delta_pend(filename, adams_file_path=None):
     plt.show()
 
 ### CONFIG ###
-filename1 = "CL_energies.csv"
+filename1 = "wall_contact_energies.csv"
 filename2 = "dp_gen_acc.csv"
 
 plot_all_energies(filename1)
