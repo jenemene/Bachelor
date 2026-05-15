@@ -63,15 +63,19 @@ V_base = np.zeros(6)
 A_base = np.zeros(6)
 A_base[-1] = 9.81 # Gravity in Z
 
+
 # Verify the geometry! You should see a perfect Stadium shape hovering over the sprockets.
 robot.plot_initial_state("closed")
+
+
+
 
 # k = 1,000,000 (solid sprockets). For now c doesnt do anything
 robot.simulate(
     tspan, V_base, A_base, 
-    config="wall_penalty_CL", 
+    config="sprockets", 
     BG_params=[0, 200], 
-    Penalty_params=[100000, 0] 
+    Penalty_params=[100000, 500]
 )
 
 robot.animation(config="closed", step=10)

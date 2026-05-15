@@ -50,9 +50,10 @@ robot.plot_initial_state("closed")
 
 robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0,250])
 
-robot.calc_energies(np.array([np.cos(np.pi/6)*np.sqrt(0.02)/2,np.cos(np.pi/6)*np.sqrt(0.02),np.cos(np.pi/6)*np.sqrt(0.02)/2]))
+#robot.calc_energies(np.array([np.cos(np.pi/6)*np.sqrt(0.02)/2,np.cos(np.pi/6)*np.sqrt(0.02),np.cos(np.pi/6)*np.sqrt(0.02)/2]))
+robot.calc_TE_delta()
 #robot.plot_gen_velocities()
 path = "JensTestMappe/jens_arbejdspakke2/results"
-file_name = "CL_energies"
-robot.CSV_creator(path, file_name, "tspan", "PE", "KE", "TE")
+#robot.CSV_creator(path, file_name, "tspan", "PE", "KE", "TE")
+robot.CSV_creator(path, "TE_delta", "tspan","TE_delta")
 robot.animation(config="closed",step=1)

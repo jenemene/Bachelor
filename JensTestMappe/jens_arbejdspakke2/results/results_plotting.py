@@ -309,6 +309,16 @@ def adams_delta_pend(filename, adams_file_path=None):
 filename1 = "wall_contact_energies.csv"
 filename2 = "dp_gen_acc.csv"
 
+# Resolve the absolute path relative to this script's location
+script_dir = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(script_dir, "TE_delta.csv")
+
+# Load the CSV data (assuming order: tspan, PE, KE, TE)
+data = np.loadtxt(file_path, delimiter=',')
+tspan, TE = data[:, 0], data[:, 1]
+
+plt.plot(tspan,TE)
+
 plot_all_energies(filename1)
 
 plot_TE(filename1)
