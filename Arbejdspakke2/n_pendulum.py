@@ -2,7 +2,6 @@
 import numpy as np
 from utils import objects as ob
 from utils import soa as SOA
-import time
 
 #intializing multibodysystem
 dp = ob.MultiBodySystem()
@@ -34,7 +33,7 @@ V_base = np.zeros(6)
 A_base = np.zeros(6)
 A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 
-#dp.plot_initial_state("open")
+# dp.plot_initial_state("open")
 
 dp.simulate(tspan,V_base,A_base,"open")
 
@@ -44,12 +43,22 @@ z0 = np.array([0.9,0.7,0.5,0.3,0.1])
 dp.calc_energies(z0)
 
 path = "Arbejdspakke2/results"
-file_name = "dp_energies"
-dp.CSV_creator(path, file_name, "tspan", "PE", "KE", "TE")
+file_name = "TE_delta_old_func"
+dp.CSV_creator(path, file_name, "tspan", "TE_delta")
 
-file_name = "5p_gen_acc"
-dp.CSV_creator(path, file_name, "tspan", "beta_dot")
+dp.calc_TE_delta()
 
-#dp.plot_gen_velocities()
+path = "Arbejdspakke2/results"
+file_name = "TE_delta_new_func"
+dp.CSV_creator(path, file_name, "tspan", "TE_delta")
 
-dp.animation(config="open",step=5)
+# path = "Arbejdspakke2/results"
+# file_name = "5p_energies"
+# dp.CSV_creator(path, file_name, "tspan", "PE", "KE", "TE")
+
+# file_name = "dp_gen_acc"
+# dp.CSV_creator(path, file_name, "tspan", "beta_dot")
+
+# dp.plot_gen_velocities()
+
+# dp.animation(config="open",step=5)

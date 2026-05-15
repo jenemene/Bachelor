@@ -53,12 +53,12 @@ class RevoluteJoint(Joint):
     def get_derrivative(self,theta,beta):
         return beta
         
-    def get_quartenion(self,theta):
+    def get_quaternion(self,theta):
         quat = SOA.quatfromrev(theta[0],self.axis)
         return quat
         
     def get_spatial_rotation(self,theta):
-        quat = self.get_quartenion(theta)
+        quat = self.get_quaternion(theta)
         return SOA.spatialrotfromquat(quat)
     
     def get_translation(self,theta):
@@ -138,9 +138,11 @@ class MultiBodySystem:
         for link in self.links:
             theta = state[idx_theta: idx_theta+link.joint.nq]
             
-            # # Normalization safety check for quaternions
+            # Normalization safety check for quaternions
             if link.joint.nq == 4:
                 theta = SOA.normalize_quaternions(theta)
+            elif link.joint.nq == 7:
+                theta[:4] = SOA.normalize_quaternions(theta[:4])
                 
             theta_list.append(theta)
             idx_theta += link.joint.nq 
@@ -410,7 +412,7 @@ class MultiBodySystem:
         IRi = np.eye(6) # To initialize rotation scatter
 
         #for loop to constrain bodies to circle motion using bilaterial constraints
-        for i in range(n, 0, -1): #starts at body n, goes down until, and including, body 2. Body 1 will be constrained later.
+        for i in range(n, 1, -1): #starts at body n, goes down until, and including, body 2. Body 1 will be constrained later.
             IRi = IRi @ self.links[i-1].joint.get_spatial_rotation(theta_list[i-1]) #[i-1] because self.links and theta_list starts from 0
 
             #calling driver func to get constraint terms
@@ -841,9 +843,9 @@ class MultiBodySystem:
                 ax_right = ax_left.twinx() # Create the independent right-hand axis
 
                 # Angular (Left Axis, Solid Lines)
-                ax_left.plot(tspan, beta_k[0, :], color=colors[0], linestyle='-', label=r'$\omega_x$')
-                ax_left.plot(tspan, beta_k[1, :], color=colors[1], linestyle='-', label=r'$\omega_y$')
-                ax_left.plot(tspan, beta_k[2, :], color=colors[2], linestyle='-', label=r'$\omega_z$')
+                ax_left.plot(tspan, beta_k[0, :], color=colors[0], linestyle='-', label=r'$\beta_x$')
+                ax_left.plot(tspan, beta_k[1, :], color=colors[1], linestyle='-', label=r'$\beta_y$')
+                ax_left.plot(tspan, beta_k[2, :], color=colors[2], linestyle='-', label=r'$\beta_z$')
 
                 # Linear (Right Axis, Dashed Lines)
                 ax_right.plot(tspan, beta_k[3, :], color=colors[0], linestyle='--', label=r'$v_x$')
@@ -854,29 +856,32 @@ class MultiBodySystem:
                 ax_left.set_ylabel(f'Body {k+1} Ang\n[rad/s]', fontweight='bold')
                 ax_right.set_ylabel(f'Body {k+1} Lin\n[m/s]', fontweight='bold', rotation=270, labelpad=15)
                 
-                ax_left.legend(loc='upper left', fontsize='small')
-                ax_right.legend(loc='upper right', fontsize='small')
+                if k == 0:
+                    ax_left.legend(loc='upper left', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
+                    ax_right.legend(loc='upper right', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
 
             # --- 3-DOF SPHERICAL JOINT ---
             elif nw == 3: 
-                ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\omega_x$')
-                ax_left.plot(tspan, beta_k[1, :], color=colors[1], label=r'$\omega_y$')
-                ax_left.plot(tspan, beta_k[2, :], color=colors[2], label=r'$\omega_z$')
+                ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\beta_x$')
+                ax_left.plot(tspan, beta_k[1, :], color=colors[1], label=r'$\beta_y$')
+                ax_left.plot(tspan, beta_k[2, :], color=colors[2], label=r'$\beta_z$')
                 
                 ax_left.set_ylabel(f'Body {k+1}\n[rad/s]')
-                ax_left.legend(loc='upper right', fontsize='small')
+                if k == 0:
+                    ax_left.legend(loc='upper right', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
 
             # --- 1-DOF REVOLUTE JOINT ---
             elif nw == 1: 
                 if self.links[k].joint.axis == "x":
-                    ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\omega_x$')
+                    ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\beta_x$')
                 elif self.links[k].joint.axis == "y":
-                    ax_left.plot(tspan, beta_k[0, :], color=colors[1], label=r'$\omega_y$')
+                    ax_left.plot(tspan, beta_k[0, :], color=colors[1], label=r'$\beta_y$')
                 elif self.links[k].joint.axis == "z":
-                    ax_left.plot(tspan, beta_k[0, :], color=colors[2], label=r'$\omega_z$')
+                    ax_left.plot(tspan, beta_k[0, :], color=colors[2], label=r'$\beta_z$')
 
                 ax_left.set_ylabel(f'Body {k+1}\n[rad/s]')
-                ax_left.legend(loc='upper right', fontsize='small')
+                if k == 0:
+                    ax_left.legend(loc='upper right', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
 
             # Update index to start at the next body's data
             idx += nw
@@ -885,6 +890,10 @@ class MultiBodySystem:
             ax_left.grid(True, alpha=0.3)
 
         axes[-1].set_xlabel('Time [s]')
+
+        for ax in axes:
+            ax.tick_params(axis='both', which='major', labelsize=12)
+
         fig.suptitle('Generalized Velocities per Link', fontsize=14)
         plt.tight_layout()
         plt.show()
@@ -1024,14 +1033,16 @@ class MultiBodySystem:
         positions = [None]*(n+1)
         com_positions = [None]*(n+1)
 
-        R_cumulative = SOA.rotfromquat(theta[n-1]) #initial rotation from body n to inertial frame
+        R_cumulative = self.links[n-1].joint.get_spatial_rotation(theta[n-1]) #initial rotation from body n to inertial frame
+        R_cumulative = R_cumulative[:3,:3]
 
         #BC for position of base body
         positions[n] = np.zeros(3)
         com_positions[n] = R_cumulative @ self.links[n-1].l_com
 
         for i in range(n-1,0,-1):
-            pRc = SOA.rotfromquat(theta[i-1]) # bc theta starts from 0
+            pRc = self.links[i-1].joint.get_spatial_rotation(theta[i-1]) # bc theta starts from 0
+            pRc = pRc[:3,:3]
 
             positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge # self.links start from 0...
             
@@ -1050,6 +1061,7 @@ class MultiBodySystem:
         Args:
             z0: A scalar or list of length n, specifying the potential energy reference offset for each body.
         """
+        # ADDED: Calcs TE_delta, which is change in TE compared to initial TE.
 
         n = len(self.links)
         
@@ -1059,6 +1071,9 @@ class MultiBodySystem:
         if len(z0) != n:
             raise ValueError(f"z0 must be of length {n} (one offset per link)")
         
+        if self.TE_delta is not None:
+            raise ValueError("calc_TE_delta has already been run.")
+        
         # Adjust for indexing
         z0 = np.insert(z0, 0, 0)
 
@@ -1066,6 +1081,7 @@ class MultiBodySystem:
         self.KE = np.zeros(nt)
         self.PE = np.zeros(nt)
         self.TE = np.zeros(nt)
+        self.TE_delta = np.zeros(nt)
         
         g = 9.81
         
@@ -1080,7 +1096,7 @@ class MultiBodySystem:
             
             # Compute com positions of hinges in the inertial frame
             com_pos = self.compute_com_pos_in_inertial_frame(theta_list)
-
+            
             for k in range(n, 0, -1):
                 link = self.links[k-1]
                 
@@ -1091,12 +1107,65 @@ class MultiBodySystem:
                 # Potential Energy for this link (m * g * h)
                 zk_pot = com_pos[k][-1] + z0[k]  # z-coordinate + offset
                 PE_t += link.m * g * zk_pot
-                    
+
             self.KE[i] = KE_t
             self.PE[i] = PE_t
             self.TE[i] = KE_t + PE_t
-        
+
+            if i == 0: # Initial instance
+                TE_ini = KE_t + PE_t
+                self.TE_delta[i] = 0.0
+                
+            else:
+                self.TE_delta[i] = self.TE[i] - TE_ini
+            
         print("Energies calculated!")
+
+    def calc_TE_delta(self):
+        if self.result is None:
+            raise ValueError("Simulation must be run before calculating energies.")
+        
+        # if self.TE_delta is not None:
+        #     raise ValueError("calc_energies has already been run.")
+        
+        n = len(self.links)
+        nt = len(self.tspan)
+        self.TE_delta = np.zeros(nt)
+
+        g = 9.81
+        
+        for i in range(nt):
+            # Initalization for each timestep
+            KE_rel_t = 0.0
+            PE_rel_t = 0.0
+
+            # Current state
+            state = self.result[:, i]
+            theta_list, _ = self.unpack_state(state)            
+            
+            # Compute com positions of hinges in the inertial frame
+            com_pos = self.compute_com_pos_in_inertial_frame(theta_list)
+            
+            if i == 0: # Initial instance
+                com_pos_ini = com_pos
+                Vk_ini = self.V[i]
+
+            for k in range(n, 0, -1):
+                link = self.links[k-1]
+                
+                # Kinetic Energy for this link
+                Vk = self.V[i][k]
+                KE_t = 0.5 * (Vk.T @ link.M @ Vk)
+                KE_ini = 0.5 * (Vk_ini[k].T @ link.M @ Vk_ini[k])
+                KE_rel_t += KE_t - KE_ini
+
+                # Relative potential Energy for this link
+                zk_pot_rel = com_pos[k][-1] - com_pos_ini[k][-1]
+                PE_rel_t += link.m * g * zk_pot_rel
+
+            self.TE_delta[i] = KE_rel_t + PE_rel_t
+
+        print("TE_delta calculated!")
 
     def CSV_creator(self, path, filename, *attr_names):
         # Made mainly by Gemini
