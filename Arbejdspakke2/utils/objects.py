@@ -814,14 +814,17 @@ class MultiBodySystem:
         
         return beta_dot_delta[1:n+1] #returning on 0 based indexing so it mathes
 
-    def plot_gen_velocities(self):
-        #renskrevet af gemini, havde problemer med nogle axer ifh til free joint plot
-
+    def plot_gen_velocities(self, savefig=False):
         n = len(self.links)
         idx = self.total_nq # Index where velocities start
 
-        # Create figure for subplots
-        fig, axes = plt.subplots(n, 1, figsize=(10, 2.5 * n), sharex=True)
+        # Create figure for subplots - added gridspec_kw to leave space at the bottom for the legend
+        fig, axes = plt.subplots(
+            n, 1, 
+            figsize=(8, 2 * n + 0.6), # Slightly taller figure to accommodate bottom legend
+            sharex=True, 
+            layout="constrained"
+        )
 
         if n == 1:
             axes = [axes] 
@@ -852,13 +855,9 @@ class MultiBodySystem:
                 ax_right.plot(tspan, beta_k[4, :], color=colors[1], linestyle='--', label=r'$v_y$')
                 ax_right.plot(tspan, beta_k[5, :], color=colors[2], linestyle='--', label=r'$v_z$')
 
-                # Independent Labels and Legends
+                # Independent Labels
                 ax_left.set_ylabel(f'Body {k+1} Ang\n[rad/s]', fontweight='bold')
                 ax_right.set_ylabel(f'Body {k+1} Lin\n[m/s]', fontweight='bold', rotation=270, labelpad=15)
-                
-                if k == 0:
-                    ax_left.legend(loc='upper left', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
-                    ax_right.legend(loc='upper right', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
 
             # --- 3-DOF SPHERICAL JOINT ---
             elif nw == 3: 
@@ -867,8 +866,6 @@ class MultiBodySystem:
                 ax_left.plot(tspan, beta_k[2, :], color=colors[2], label=r'$\beta_z$')
                 
                 ax_left.set_ylabel(f'Body {k+1}\n[rad/s]')
-                if k == 0:
-                    ax_left.legend(loc='upper right', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
 
             # --- 1-DOF REVOLUTE JOINT ---
             elif nw == 1: 
@@ -880,8 +877,6 @@ class MultiBodySystem:
                     ax_left.plot(tspan, beta_k[0, :], color=colors[2], label=r'$\beta_z$')
 
                 ax_left.set_ylabel(f'Body {k+1}\n[rad/s]')
-                if k == 0:
-                    ax_left.legend(loc='upper right', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
 
             # Update index to start at the next body's data
             idx += nw
@@ -894,8 +889,34 @@ class MultiBodySystem:
         for ax in axes:
             ax.tick_params(axis='both', which='major', labelsize=12)
 
-        fig.suptitle('Generalized Velocities per Link', fontsize=14)
-        plt.tight_layout()
+        fig.align_ylabels(axes)
+
+        # --- GLOBAL LEGEND GENERATION ---
+        # Gather all line handles and labels from every axis in the figure
+        handles, labels = [], []
+        for ax in fig.axes:
+            h, l = ax.get_legend_handles_labels()
+            handles.extend(h)
+            labels.extend(l)
+
+        # Filter out duplicate labels (so beta_x, v_x etc. only appear once)
+        by_label = dict(zip(labels, handles))
+
+        # Place the unique legend at the bottom center of the whole figure
+        fig.legend(
+            by_label.values(), 
+            by_label.keys(), 
+            loc='outside lower center', # Places it cleanly beneath the subplots
+            ncol=len(by_label),         # Forces everything onto a horizontal row
+            fontsize=12, 
+            frameon=True, 
+            framealpha=0.9
+        )
+
+        if savefig == True:
+            plt.savefig("gen_velocities.pdf")
+            print("Figure saved as gen_velocities.pdf in current directory.")
+                
         plt.show()
 
     def animation(self, config="openclosed", step=1):
@@ -1071,7 +1092,7 @@ class MultiBodySystem:
         if len(z0) != n:
             raise ValueError(f"z0 must be of length {n} (one offset per link)")
         
-        if self.TE_delta is not None:
+        if hasattr(self, 'TE_delta') and self.TE_delta is not None:
             raise ValueError("calc_TE_delta has already been run.")
         
         # Adjust for indexing
@@ -1125,8 +1146,8 @@ class MultiBodySystem:
         if self.result is None:
             raise ValueError("Simulation must be run before calculating energies.")
         
-        # if self.TE_delta is not None:
-        #     raise ValueError("calc_energies has already been run.")
+        if hasattr(self, 'TE_delta') and self.TE_delta is not None:
+            raise ValueError("calc_energies has already been run.")
         
         n = len(self.links)
         nt = len(self.tspan)

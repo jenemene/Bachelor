@@ -40,17 +40,7 @@ dp.simulate(tspan,V_base,A_base,"open")
 # should be specified [body 1, body 2, ..., body n]
 z0 = np.array([0.9,0.7,0.5,0.3,0.1])
 # z0 = np.array([0.3,0.1])
-dp.calc_energies(z0)
-
-path = "Arbejdspakke2/results"
-file_name = "TE_delta_old_func"
-dp.CSV_creator(path, file_name, "tspan", "TE_delta")
-
-dp.calc_TE_delta()
-
-path = "Arbejdspakke2/results"
-file_name = "TE_delta_new_func"
-dp.CSV_creator(path, file_name, "tspan", "TE_delta")
+# dp.calc_energies(z0)
 
 # path = "Arbejdspakke2/results"
 # file_name = "5p_energies"
@@ -59,6 +49,6 @@ dp.CSV_creator(path, file_name, "tspan", "TE_delta")
 # file_name = "dp_gen_acc"
 # dp.CSV_creator(path, file_name, "tspan", "beta_dot")
 
-# dp.plot_gen_velocities()
+dp.plot_gen_velocities(savefig=True)
 
 # dp.animation(config="open",step=5)
