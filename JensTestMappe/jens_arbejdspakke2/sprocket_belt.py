@@ -75,7 +75,7 @@ robot.simulate(
     tspan, V_base, A_base, 
     config="sprockets", 
     BG_params=[0, 200], 
-    Penalty_params=[100000, 500]
+    Penalty_params=[100000, 400]
 )
 
 robot.animation(config="closed", step=10)
