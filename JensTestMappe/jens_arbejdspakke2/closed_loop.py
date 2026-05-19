@@ -24,10 +24,10 @@ joint3 = ob.FreeJoint()
 joint3.q_init = np.hstack([SOA.quatfromrev(0.5*np.pi, "y"),np.array([0.0,0,0])]) 
 
 #defining link
-link3_fixed= ob.Link(mass=20.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint3_fixed)
-link3 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint3)
-link2 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint2)
-link1 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint1)
+link3_fixed= ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint3_fixed)
+link3 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
+link2 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint2)
+link1 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
 
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
@@ -36,7 +36,7 @@ robot.add_link(link2)
 robot.add_link(link1)
 
 #parameters for simulation
-tspan = np.arange(0,10,0.01)
+tspan = np.arange(0,10,0.005)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)

@@ -52,7 +52,7 @@ robot.add_link(link2)
 
 
 #parameters for simulation
-tspan = np.arange(0,10,0.005)
+tspan = np.arange(0,20,0.005)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)

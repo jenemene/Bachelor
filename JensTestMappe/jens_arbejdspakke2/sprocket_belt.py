@@ -30,7 +30,7 @@ start_x = - (N_s * L) / 2
 
 # Sprockets are at X= +/- 3.3, Z=0 with radius 2.125.
 # We spawn the top straight at Z = 2.175 to give it 5cm of clearance.
-start_z = 2.175
+start_z = 2.125
 pos_base = np.array([start_x, 0.0, start_z])
 
 # Rotate the base 90 degrees around Y so it lays perfectly horizontal
@@ -57,7 +57,7 @@ for i in range(N, 0, -1):
     robot.add_link(link)
 
 # --- 4. SIMULATION PARAMETERS ---
-tspan = np.arange(0, 30, 0.005)
+tspan = np.arange(0, 10, 0.001)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -69,13 +69,15 @@ robot.plot_initial_state("closed")
 
 
 
-
-# k = 1,000,000 (solid sprockets). For now c doesnt do anything
+# k = 1e6 provides a solid surface
+# c = 2 * sqrt(k * m) = 2 * sqrt(1e6 * 2) ≈ 2828 for critical damping
 robot.simulate(
     tspan, V_base, A_base, 
     config="sprockets", 
-    BG_params=[0, 200], 
-    Penalty_params=[100000, 400]
+    BG_params=[0, 800], 
+    Penalty_params=[1e6, 2828]
 )
+
+robot.calc_and_plot_penetration()
 
 robot.animation(config="closed", step=10)
