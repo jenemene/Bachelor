@@ -748,15 +748,11 @@ class MultiBodySystem:
         c_damping = Penalty_params[1]
 
         # ---- 5. GEOMETRY ----
-        # sprockets = [
-        #     {'center': np.array([-1.0-(0.235*min(t,10)), 0.0, 0.0]), 'radius': 2.125}, # Left Sprocket
-        #     {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.125}  # Right Sprocket
-        # ]
-
         sprockets = [
-             {'center': np.array([-3.3, 0.0, 0.0]), 'radius': 2.125}, # Left Sprocket
+             {'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]), 'radius': 2.125}, # Left Sprocket
              {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.125}  # Right Sprocket
          ]
+        
         for k in range(1,n+1):
             IR_k = IR_list[k]  
             IR_k_3 = IR_k[:3, :3]
@@ -897,7 +893,6 @@ class MultiBodySystem:
         end_time = time.perf_counter()
         elapesed_time = end_time - start_time
         print(f"Simulation finished. Runtime: {elapesed_time:.2f} s")
-
     
     def get_omega_diag(self,theta_list,tau_bar,D,n):
                 #storage
@@ -1513,16 +1508,11 @@ class MultiBodySystem:
             theta_list, _ = self.unpack_state(state)
             positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
             
-            # sprockets = (
-            #     (np.array([-1.0-(0.235*min(t, 10.0)), 0.0, 0.0]), 2.125), # Left Sprocket
-            #     (np.array([ 3.3, 0.0, 0.0]), 2.125)                      # Right Sprocket
-            # )
-            
             sprockets = (
-                (np.array([-3.3, 0.0, 0.0]), 2.125), # Left Sprocket
-                (np.array([ 3.3, 0.0, 0.0]), 2.125)                      # Right Sprocket
-            )
-
+                 (np.array([-1.0-(0.23*min(t, 10.0)), 0.0, 0.0]), 2.125), # Left Sprocket
+                 (np.array([ 3.3, 0.0, 0.0]), 2.125)                      # Right Sprocket
+             )
+            
 
             max_pen = 0.0
             for k in range(1, n+1):

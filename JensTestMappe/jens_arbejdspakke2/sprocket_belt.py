@@ -57,7 +57,7 @@ for i in range(N, 0, -1):
     robot.add_link(link)
 
 # --- 4. SIMULATION PARAMETERS ---
-tspan = np.arange(0, 10, 0.001)
+tspan = np.arange(0, 30, 0.005)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -74,10 +74,10 @@ robot.plot_initial_state("closed")
 robot.simulate(
     tspan, V_base, A_base, 
     config="sprockets", 
-    BG_params=[0, 800], 
-    Penalty_params=[1e6, 2828]
+    BG_params=[0, 400], 
+    Penalty_params=[1e5, 400]
 )
 
 robot.calc_and_plot_penetration()
 
-robot.animation(config="closed", step=10)
+robot.animation(config="closed", step=50)
