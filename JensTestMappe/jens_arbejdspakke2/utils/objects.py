@@ -431,19 +431,13 @@ class MultiBodySystem:
             [Λ_n1, Λ_nn]
         ])
 
-        V_tip = IR1@link1.RBT.T@V_f[1]
-        v_tip  = V_tip[3:]
-        v_base = IRn[:3, :3]@V_f[n][3:]
-
-
         l_IO1 = positions[1]
         l_IOn = positions[n]
 
         IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
     
         Φ =  -(l_IOn - (l_IO1 + IR1[:3, :3]@link1.l_hinge))
-        #Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
-        Φ_dot =   v_tip - v_base
+        Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
         Φ_ddot =  -(IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge))
 
         # Baumgarte stabilization
@@ -749,9 +743,12 @@ class MultiBodySystem:
 
         # ---- 5. GEOMETRY ----
         sprockets = [
-             {'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]), 'radius': 2.125}, # Left Sprocket
-             {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.125}  # Right Sprocket
+             {'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]), 'radius': 2.12}, # Left Sprocket
+             {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.12}  # Right Sprocket
          ]
+        
+        #gammelt center 'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]),
+        #gammel radius var 2.125
         
         for k in range(1,n+1):
             IR_k = IR_list[k]  
@@ -769,13 +766,16 @@ class MultiBodySystem:
                 d = distance - sprocket['radius']
 
                 if d < 0: # Penetration into the sprocket (also a little cheating on the driving)
+
+                    #geometry
                     normal_vec = vec_from_sprocket_center / distance #normal vec - this is based on where the link is at the time, and NOT where it was during penetration
                     #there is an argument for this being slightly inaccurate, but with a small enough dt the discreptency is expected to be rather small.
                     
                     tangent_vec = np.array([-normal_vec[2], 0.0, normal_vec[0]])
                     d_dot = np.dot(normal_vec, base_vel)
+                    v_tangent = np.dot(tangent_vec,base_vel)
                     
-                    if t>5:
+                    if t>15 and sprocket['center'][0]>0:
                         F_drive_mag = 20.0
                     else: 
                         F_drive_mag = 0.0
@@ -784,10 +784,11 @@ class MultiBodySystem:
                     F_normal_mag = -k_stiffness * d - c_damping * d_dot
                     if F_normal_mag < 0:
                         F_normal_mag = 0.0
-                    
-                    # 3D force vector in inertial frame, purely along the normal
+
+                
+                    # normal force
                     F_sprocket_3_out = F_normal_mag * normal_vec
-                    
+                    #driving force
                     F_sprocket_3_drive = F_drive_mag*tangent_vec
                     # Transform force to body frame
                     F_body = IR_k_3.T @ (F_sprocket_3_out + F_sprocket_3_drive)
@@ -1509,10 +1510,10 @@ class MultiBodySystem:
             positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
             
             sprockets = (
-                 (np.array([-1.0-(0.23*min(t, 10.0)), 0.0, 0.0]), 2.125), # Left Sprocket
-                 (np.array([ 3.3, 0.0, 0.0]), 2.125)                      # Right Sprocket
+                 (np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]) , 2.12), # Left Sprocket
+                 (np.array([ 3.3, 0.0, 0.0]), 2.12)                      # Right Sprocket
              )
-            
+            #gammelt center np.array([-1.0-(0.23*min(t, 10.0))
 
             max_pen = 0.0
             for k in range(1, n+1):
