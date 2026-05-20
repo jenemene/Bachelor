@@ -1018,7 +1018,7 @@ class MultiBodySystem:
         self.KE = np.zeros(nt)
         self.PE = np.zeros(nt)
         self.TE = np.zeros(nt)
-        self.TE_delta = np.zeros(nt)
+        self.TE_error = np.zeros(nt)
         
         g = 9.81
         
@@ -1051,20 +1051,20 @@ class MultiBodySystem:
 
             if i == 0: # Initial instance
                 TE_ini = KE_t + PE_t
-                self.TE_delta[i] = 0.0
+                self.TE_error[i] = 0.0
                 
             else:
-                self.TE_delta[i] = self.TE[i] - TE_ini
+                self.TE_error[i] = self.TE[i] - TE_ini
             
         print("Energies calculated!")
 
-    def calc_TE_delta(self):
+    def calc_TE_error(self):
         if self.result is None:
             raise ValueError("Simulation must be run before calculating energies.")
         
         n = len(self.links)
         nt = len(self.tspan)
-        self.TE_delta = np.zeros(nt)
+        self.TE_error = np.zeros(nt)
 
         g = 9.81
         
@@ -1097,14 +1097,14 @@ class MultiBodySystem:
                 zk_pot_rel = com_pos[k][-1] - com_pos_ini[k][-1]
                 PE_rel_t += link.m * g * zk_pot_rel
 
-            self.TE_delta[i] = KE_rel_t + PE_rel_t
+            self.TE_error[i] = KE_rel_t + PE_rel_t
 
-        # print("TE_delta calculated!")
+        # print("TE_error calculated!")
 
-    def return_TE_delta_mean(self):
-        if self.TE_delta is None:
-            raise ValueError("TE_delta has not been calculated yet.")
-        return np.mean(self.TE_delta)
+    def return_TE_error_mean(self):
+        if self.TE_error is None:
+            raise ValueError("TE_error has not been calculated yet.")
+        return np.mean(self.TE_error)
 
     def CSV_creator(self, path, filename, *attr_names):
         # Made mainly by Gemini

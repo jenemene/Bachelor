@@ -40,19 +40,19 @@ V_base = np.zeros(6)
 A_base = np.zeros(6)
 A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 
-robot.plot_initial_state("closed")
+# robot.plot_initial_state("closed")
 
-robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0,500])
+robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0.1,500])
 
-# robot.calc_TE_delta()
+robot.calc_TE_error()
 
-# path = "Arbejdspakke2/results"
-# file_name = "3_closed_energies_t100"
-# robot.CSV_creator(path, file_name, "tspan", "TE_delta")
+path = "Arbejdspakke2/results"
+file_name = "3_closed_TE_error_BG_01_500"
+robot.CSV_creator(path, file_name, "tspan", "TE_error")
 
 # file_name = "3_closed_gen_acc_t100"
 # robot.CSV_creator(path, file_name, "tspan", "beta_dot")
 
-robot.plot_gen_velocities(savefig=True)
+# robot.plot_gen_velocities(savefig=False)
 
-robot.animation(config="closed",step=5)
+# robot.animation(config="closed",step=5)

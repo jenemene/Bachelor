@@ -29,22 +29,22 @@ def plot_all_energies(filename):
 
     plt.show()
 
-def plot_TE(filename):
+def plot_TE_error(filename):
     # Resolve the absolute path relative to this script's location
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
 
     # Load the CSV data (assuming order: tspan, PE, KE, TE)
     data = np.loadtxt(file_path, delimiter=',')
-    tspan, TE_Delta = data[:, 0], data[:, 1]
+    tspan, TE_error = data[:, 0], data[:, 1]
 
     plt.figure(figsize=(10, 6))
 
-    plt.plot(tspan, TE_Delta, color='black')
+    plt.plot(tspan, TE_error, color='black')
 
     # Formatting
     plt.xlabel("Time [s]", fontsize=14)
-    plt.ylabel(r"$\Delta$ Total Energy [J]", fontsize=14)
+    plt.ylabel(r"Relative Total Energy [J]", fontsize=14)
     plt.grid(True, alpha=0.5)
 
     # Force scientific notation for the y-axis
@@ -56,39 +56,75 @@ def plot_TE(filename):
 
     plt.show()
 
-def compare_TE(filename1,filename2):
+def compare_TE_error(*filenames):
+    """
+    Compares Total Energy error across an arbitrary number of CSV files
+    using a logarithmic y-axis and hardcoded legend labels.
+    
+    Parameters:
+    *filenames (str): Variable number of file names/paths relative to the script.
+    """
+    if not filenames:
+        print("No files provided for comparison.")
+        return
+
     # Resolve the absolute path relative to this script's location
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path1 = os.path.join(script_dir, filename1)
-    file_path2 = os.path.join(script_dir, filename2)
-
-    # Load the CSV data (assuming order: tspan, TE_delta)
-    data1 = np.loadtxt(file_path1, delimiter=',')
-    tspan1, TE_Delta1 = data1[:, 0], data1[:, 1]
-    dt1 = tspan1[1] - tspan1[0]
-
-    data2 = np.loadtxt(file_path2, delimiter=',')
-    tspan2, TE_Delta2 = data2[:, 0], data2[:, 1]
-    dt2 = tspan2[1] - tspan2[0]
-
+    
     plt.figure(figsize=(10, 6))
+    
+    colors = plt.cm.tab10.colors  
+    line_styles = ['-', '--', '-.', ':']
 
-    plt.plot(tspan1, TE_Delta1, color='black', label=fr'$\Delta t = {dt1:.2e}$')
-    plt.plot(tspan2, TE_Delta2, color='red', linestyle='--', label=fr'$\Delta t = {dt2:.2e}$')
+    # Dictionary to manually map specific filenames to their respective labels
+    # Update or add keys here if your filenames change
+    hardcoded_labels = {
+        '3_closed_TE_error_BG_50_500.csv': r'$A=50, B=500$',
+        '3_closed_TE_error_BG_100_100.csv': r'$A=100, B=100$',
+        '3_closed_TE_error_BG_10_50.csv': r'$A=10, B=50$',
+        '3_closed_TE_error_BG_1_500.csv': r'$A=1, B=500$',
+        '3_closed_TE_error_BG_01_500.csv': r'$A=0.1, B=500$'
+    }
+
+    for i, filename in enumerate(filenames):
+        file_path = os.path.join(script_dir, filename)
+        
+        try:
+            # Load the CSV data
+            data = np.loadtxt(file_path, delimiter=',')
+            tspan, TE_error = data[:, 0], data[:, 1]
+            
+            # Use the hardcoded label if available, otherwise default to the filename
+            label_name = hardcoded_labels.get(filename, os.path.splitext(filename)[0])
+            
+            color = colors[i % len(colors)]
+            style = line_styles[(i // len(colors)) % len(line_styles)]
+            
+            plt.plot(
+                tspan, 
+                TE_error, 
+                color=color, 
+                linestyle=style, 
+                label=label_name
+            )
+            
+        except Exception as e:
+            print(f"Skipping file '{filename}' due to error: {e}")
 
     # Formatting
     plt.xlabel("Time [s]", fontsize=14)
-    plt.ylabel(r"$\Delta$ Total Energy [J]", fontsize=14)
-    plt.legend(loc='best', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
-    plt.grid(True, alpha=0.5)
+    plt.ylabel("Total Energy error [J]", fontsize=14)
+    
+    # Enable logarithmic scale for y-axis
+    plt.yscale('log')
+    
+    plt.legend(loc='lower right', fontsize=12, frameon=True, framealpha=0.9, labelspacing=1.0)
+    plt.grid(True, which="both", alpha=0.3) 
 
-    # Force scientific notation for the y-axis
     ax = plt.gca()
-    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-
     ax.tick_params(axis='both', which='major', labelsize=12)
 
+    plt.tight_layout()
     plt.show()
 
 def adams_comp(filename, adams_file_path, plot_diff=False, savefig=False):
@@ -194,7 +230,7 @@ def adams_comp(filename, adams_file_path, plot_diff=False, savefig=False):
                     
                     if plot_diff and soa_acc is not None:
                         delta = soa_acc - adams_acc
-                        ax.plot(tspan, delta, label=r'$\Delta$ (SOA - Adams)', color='red', linestyle='--', linewidth=1.5)
+                        ax.plot(tspan, delta, label=r'Error (SOA - Adams)', color='red', linestyle='--', linewidth=1.5)
 
         ax.set_ylabel(f'Body {b+1} $\\dot{{\\beta}}_y$\n[rad/s$^2$]', fontsize=14)
         ax.grid(True, alpha=0.5)
@@ -231,7 +267,7 @@ def adams_comp(filename, adams_file_path, plot_diff=False, savefig=False):
 
     plt.show()
 
-def adams_comp_diff_only(filename, adams_file_path, savefig=False):
+def adams_comp_error_only(filename, adams_file_path, savefig=False):
     # Resolve the absolute path relative to this script's location
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
@@ -324,7 +360,7 @@ def adams_comp_diff_only(filename, adams_file_path, savefig=False):
                 adams_acc = -adams_data[:, col_idx] * (np.pi / 180.0) # Convert deg/s^2 to rad/s^2
                 if soa_acc is not None:
                     delta = soa_acc - adams_acc
-                    ax.plot(tspan, delta, label=r'$\Delta$ (SOA - Adams)', color='red', linestyle='--', linewidth=1.5)
+                    ax.plot(tspan, delta, label=r'Error (SOA - Adams)', color='red', linestyle='--', linewidth=1.5)
         
         ax.set_ylabel(f'Body {b+1} $\\dot{{\\beta}}_y$\n[rad/s$^2$]', fontsize=14)
         ax.grid(True, alpha=0.5)
@@ -356,19 +392,22 @@ def adams_comp_diff_only(filename, adams_file_path, savefig=False):
     )
 
     if savefig == True:
-        plt.savefig("adams_comp_diff_only.pdf")
-        print("Figure saved as adams_comp_diff_only.pdf in current directory.")
+        plt.savefig("adams_comp_error_only.pdf")
+        print("Figure saved as adams_comp_error_only.pdf in current directory.")
 
     plt.show()
 
 ### CONFIG ###
-filename1 = "3_closed_energies_t100.csv"
-filename2 = "3_closed_gen_acc.csv"
+filename1 = "3_closed_TE_error.csv"
+filename2 = "3_closed_TE_error_half.csv"
 
-plot_TE(filename1)
+# plot_TE_error("3_closed_TE_error_t100.csv")
+
+compare_TE_error("3_closed_TE_error_BG_10_50.csv","3_closed_TE_error_BG_100_100.csv","3_closed_TE_error_BG_01_500.csv","3_closed_TE_error_BG_50_500.csv")
 
 adams_path = r"C:\Users\kaspe\OneDrive - Aarhus universitet\6. semester\Bachelorprojekt\Adams\closed_3_body_adams_results.csv"
+filename3 = "3_closed_gen_acc.csv"
 
-adams_comp(filename2, adams_path, plot_diff=True, savefig=True)
+# adams_comp(filename3, adams_path, plot_diff=True, savefig=True)
 
-adams_comp_diff_only(filename2, adams_path, savefig=True)
+# adams_comp_error_only(filename3, adams_path, savefig=True)
