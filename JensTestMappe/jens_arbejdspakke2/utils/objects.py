@@ -117,6 +117,8 @@ class MultiBodySystem:
         self.total_nw = 0
         self.result = None
         self.tspan = None
+        self.constraint_violation = []
+
 
     def add_link(self,link):
         self.links.insert(0, link)
@@ -268,6 +270,10 @@ class MultiBodySystem:
 
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
+        if self._record_metrics == True:
+            self.constraint_violation.append(np.linalg.norm(Φ))#for storage, can be uncommented if not in use
+
+
         return state_dot, V_f
 
     def get_state_dot_driver(self,t,state,V_base,A_base,BG_params):
@@ -384,7 +390,7 @@ class MultiBodySystem:
         n = len(self.links)
 
         #generalized forced are usedto simulate damping
-        damping = 20
+        damping = 0.1
         tau_list = [-damping * beta for beta in beta_list]
     
 
@@ -431,19 +437,13 @@ class MultiBodySystem:
             [Λ_n1, Λ_nn]
         ])
 
-        V_tip = IR1@link1.RBT.T@V_f[1]
-        v_tip  = V_tip[3:]
-        v_base = IRn[:3, :3]@V_f[n][3:]
-
-
         l_IO1 = positions[1]
         l_IOn = positions[n]
 
         IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
     
         Φ =  -(l_IOn - (l_IO1 + IR1[:3, :3]@link1.l_hinge))
-        #Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
-        Φ_dot =   v_tip - v_base
+        Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
         Φ_ddot =  -(IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge))
 
         # Baumgarte stabilization
@@ -472,170 +472,6 @@ class MultiBodySystem:
 
         return state_dot, V_f
 
-    def get_state_dot_driver_bottom(self,t,state,V_base,A_base,BG_params):
-        theta_list, beta_list = self.unpack_state(state)
-        n = len(self.links)
-
-        #generalized forces (set to 0 for now, could be used if wanted)
-        tau_list = [np.zeros(link.joint.nw) for link in self.links]
-
-        #CALCULATION OF THETA_DOT
-        theta_dot_list = []
-
-        for i in range(len(self.links)):
-            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i])
-            theta_dot_list.append(theta_dot)
-
-        #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC)
-        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
-
-        #ROTATIONS AND CONSTRAINT SETUPS
-        link1 = self.links[0]
-
-        IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
-
-        Q = np.block([np.zeros((3,3)), np.eye(3)])
-
-        #OPERTATIONAL SPACE INERTIA
-        omega_diag, _, _ = self.omega(theta_list,tau_bar,D,n)
-
-        #calculating block entires
-        Λ_11 = IR1 @ (link1.RBT.T @ omega_diag[1] @ link1.RBT) @IR1.T
-
-        Λ_block = Λ_11
-
-        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
-        
-        l_IO1 = positions[1]
-        IR1_3 = IR1[:3,:3]
-        ω_tilde_I = SOA.skewfromvec(IR1_3 @ V_f[1][:3])
-
-        ω = np.pi
-
-        f_driver = np.array([0.2 + 0.2*np.sin(ω*t),0,0])
-        f_d_driver = np.array([0.2 - 0.2*ω*np.cos(ω*t),0,0])
-        f_dd_driver = np.array([0.2 - 0.2*ω**2*np.sin(ω*t),0,0])
-
-        Φ = l_IO1 + IR1_3@link1.l_hinge - f_driver
-        Φ_dot = IR1_3@V_f[1][3:] + ω_tilde_I@IR1_3@link1.l_hinge - f_d_driver
-        Φ_ddot = IR1_3@A_f[1][3:] + SOA.skewfromvec(IR1_3@A_f[1][:3])@IR1_3@link1.l_hinge + ω_tilde_I@ω_tilde_I@IR1_3@link1.l_hinge - f_dd_driver
-
-        print(f"t={t:.2f}  |Φ| = {np.linalg.norm(Φ):.2e}")
-
-        # Baumgarte stabilization
-        α, β = BG_params
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β)
-
-        #solving for lagrange multipliers
-        #λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
-        λ = -np.linalg.solve(Q@Λ_block@Q.T,f) # Dimension: 3x1
-
-        #calculating f_c
-        f_c_closed_loop_const = -Q.T @ λ
-        f_c = [np.zeros(6,) for _ in range(n+2)]
-
-        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const
-
-        #calculating beta_dot_delta
-        beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
-
-        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
-
-        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
-
-        return state_dot, V_f
-
-    def get_state_dot_unilateral_constraints(self,t,state,V_base,A_base):
-        theta_list, beta_list = self.unpack_state(state)
-        n = len(self.links)
-
-        #generalized forces (set to 0 for now, could be used if wanted)
-        #tau_list = [np.zeros(link.joint.nw) for link in self.links]
-        damping = 0.0
-        tau_list = [-damping * beta for beta in beta_list]
-
-        #CALCULATION OF THETA_DOT
-        theta_dot_list = []
-
-        for i in range(len(self.links)):
-            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i]) #CAN CHANGE THIS TO PREALLOCATE FOR SPEED OPTIMIZATION!
-            theta_dot_list.append(theta_dot)
-
-        #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC)
-        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
-
-        #compute positions
-        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
-
-        link = self.links[n-1]
-        l_IO1 = positions[n]
-        #IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
-        IR1 = link.joint.get_spatial_rotation(theta_list[-1])
-        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[n][:3])
-    
-        Φ_f = (l_IO1 + IR1[:3, :3]@link.l_hinge)
-        Φ_f = Φ_f[0] + 0.1
-        Φ_dot_f = (IR1[:3, :3]@V_f[n][3:] + IωIO@IR1[:3, :3]@link.l_hinge)
-        Φ_dot_f = Φ_dot_f[0]
-        Φ_ddot_f = (IR1[:3, :3]@A_f[n][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[n][:3])@IR1[:3, :3]@link.l_hinge + IωIO@IωIO@IR1[:3,:3]@link.l_hinge)
-        Φ_ddot_f = Φ_ddot_f[0]
-
-        #Q matrix (only constraints on z)
-        Q = np.array([0,0,0,1,0,0]).reshape(1,6)
-
-        #OPERTATIONAL SPACE INERTIA
-        omega_diag, _, _ = self.omega(theta_list,tau_bar,D,n)
-        Λ_11 = IR1 @ (link.RBT.T @ omega_diag[n] @ link.RBT) @IR1.T
-
-        # checking for active state
-        # ADD LATER
-        o = 1
-        if o == 1:
-            if Φ_f <= 0 and Φ_ddot_f <= 0:
-                M = Q @ Λ_11 @ Q.T
-                d = Φ_ddot_f
-
-                kp = 1000.0  # Position gain
-                kd = 1000.0   # Velocity gain
-                
-                # Modified 'd' to account for penetration and approach velocity
-                d_stabilized = Φ_ddot_f + kd * Φ_dot_f + kp * Φ_f
-                λ = -d_stabilized/M
-
-                # lam = cp.Variable(1)
-                # prob = cp.Problem(cp.Minimize(0.5 * lam * M * lam + d * lam),[lam >= 0])
-                # prob.solve()
-                # λ = lam.value
-            else:
-                λ = np.array([0])
-        else:
-            M = Q @ Λ_11 @ Q.T
-            d = Φ_ddot_f
-
-            kp = 1000.0  # Position gain
-            kd = 1000.0   # Velocity gain
-            
-            # Modified 'd' to account for penetration and approach velocity
-            d_stabilized = Φ_ddot_f + kd * Φ_dot_f + kp * Φ_f
-            λ = -d_stabilized/M
-        
-        #print(f"t = {t:.2f}     Φ = {Φ_f:.2e}   Φ_ddot_f = {Φ_ddot_f:.2e}   M = {M}     λ = {λ}")
-
-        f_c = [np.zeros(6,) for _ in range(n+2)]
-        f_c_closed_loop_const = -Q.T@λ
-        f_c[n] = link.RBT @ IR1.T @ f_c_closed_loop_const
-        f_c[n] = f_c[n].flatten()
-        #print(f_c_closed_loop_const)
-
-        #calculating beta_dot_delta
-        beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
-
-        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
-
-        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
-
-        return state_dot, V_f
-        
     def get_state_dot_multiple_constraints(self,t,state,V_base,A_base,BG_params):
         #Previous implementation was not physical, it did not account for the cross-coupling between constrints and simply solved them independently. This is not correct. 
 
@@ -784,8 +620,7 @@ class MultiBodySystem:
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
 
         return state_dot, V_f
-
-        
+    
     def run_ATBI(self,theta_list,beta_list,tau_list,V_base,A_base):
         n = len(self.links)
 
@@ -807,8 +642,8 @@ class MultiBodySystem:
         tau[0]     = np.zeros_like(tau[1])
         tau[n+1]   = np.zeros_like(tau[n])
 
-        P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic = \
-            [([None]*(n+2)) for _ in range(11)] 
+        P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic,pRc_cache = \
+            [([None]*(n+2)) for _ in range(12)] 
             
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
@@ -820,6 +655,7 @@ class MultiBodySystem:
         # --- ATBI scatter ---- 
         for k in range(n, 0, -1):
             pRc = links[k].joint.get_spatial_rotation(theta[k]) 
+            pRc_cache[k] = pRc
             cRp = pRc.T 
 
             delta_V = links[k].joint.H.T @ beta[k]
@@ -834,7 +670,7 @@ class MultiBodySystem:
                 pRc = np.eye(6)
                 cRp = pRc.T
             else:
-                pRc = links[k-1].joint.get_spatial_rotation(theta[k-1])
+                pRc = pRc_cache[k-1]
                 cRp = pRc.T 
 
             P = links[k].RBT @ pRc @ P_plus[k-1] @ cRp @ links[k].RBT.T + links[k].M
@@ -850,7 +686,7 @@ class MultiBodySystem:
 
         # --- 4. ATBI SCATTER ---
         for k in range(n, 0, -1):
-            pRc = links[k].joint.get_spatial_rotation(theta[k])
+            pRc = pRc_cache[k]
             cRp = pRc.T 
 
             A_plus = cRp @ links[k].RBT.T @ A[k+1]
@@ -880,8 +716,8 @@ class MultiBodySystem:
         tau[0]     = np.zeros_like(tau[1])
         tau[n+1]   = np.zeros_like(tau[n])
 
-        P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic = \
-            [([None]*(n+2)) for _ in range(11)] 
+        P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic,pRc_cache = \
+            [([None]*(n+2)) for _ in range(12)] 
             
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
@@ -893,6 +729,7 @@ class MultiBodySystem:
         # --- ATBI scatter (Kinematics) ---- 
         for k in range(n, 0, -1):
             pRc = links[k].joint.get_spatial_rotation(theta[k]) 
+            pRc_cache[k] = pRc
             cRp = pRc.T 
 
             delta_V = links[k].joint.H.T @ beta[k]
@@ -901,28 +738,29 @@ class MultiBodySystem:
             agothic[k] = SOA.spatialskewtilde(V[k]) @ links[k].joint.H.T @ beta[k]
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
         
-
-
         # --- PENALTY DETECTION --- #
         
         #intializing external force array. This could contain any external forces, but for now, its purely used for the forces coming from sprockets
         f_ext_body = [np.zeros(6,) for _ in range(n+2)]
 
-        # Unpack just the stiffness from the parameters. For now only stifness. I think we need damping at some point, but we figure it out as we go.
+        # Unpack stiffness and damping
         k_stiffness = Penalty_params[0]
+        c_damping = Penalty_params[1]
 
         # ---- 5. GEOMETRY ----
         sprockets = [
-            {'center': np.array([-1.0-(0.28*min(t,10)), 0.0, 0.0]), 'radius': 2.1}, # Left Sprocket
-            {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.1}  # Right Sprocket
-        ]
-
-
+             {'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]), 'radius': 2.12}, # Left Sprocket
+             {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.12}  # Right Sprocket
+         ]
+        
+        #gammelt center 'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]),
+        #gammel radius var 2.125
         
         for k in range(1,n+1):
             IR_k = IR_list[k]  
             IR_k_3 = IR_k[:3, :3]
             pos = positions[k] #get current position of base of link k
+            base_vel = IR_k_3 @ V[k][3:] #get current velocity
 
             #loop over sprockets. Right now there are two, but more can be added, thus a for loop is implemented
             for sprocket in sprockets:
@@ -934,30 +772,35 @@ class MultiBodySystem:
                 d = distance - sprocket['radius']
 
                 if d < 0: # Penetration into the sprocket (also a little cheating on the driving)
+
+                    #geometry
                     normal_vec = vec_from_sprocket_center / distance #normal vec - this is based on where the link is at the time, and NOT where it was during penetration
                     #there is an argument for this being slightly inaccurate, but with a small enough dt the discreptency is expected to be rather small.
                     
-                    #calcuating the tangent vector to simulate the sprocket driving it around. We could optimize this and maybe implement friction and a rotating sprocket.
-                    tangent_vec = np.array([-normal_vec[2], 0, normal_vec[0]])
-                    if t>14:
-                        F_drive_mag = 50.0
+                    tangent_vec = np.array([-normal_vec[2], 0.0, normal_vec[0]])
+                    d_dot = np.dot(normal_vec, base_vel)
+                    v_tangent = np.dot(tangent_vec,base_vel)
+                    
+                    if t>15 and sprocket['center'][0]>0:
+                        F_drive_mag = 20.0
                     else: 
                         F_drive_mag = 0.0
                     
+                    # Calculate pure spring compliant force and damping, pushing outward
+                    F_normal_mag = -k_stiffness * d - c_damping * d_dot
+                    if F_normal_mag < 0:
+                        F_normal_mag = 0.0
 
-
-                    # Calculate pure spring compliant force, pushing outward
-                    F_normal_mag = -k_stiffness * d
-                    
-                    # 3D force vector in inertial frame, purely along the normal
+                
+                    # normal force
                     F_sprocket_3_out = F_normal_mag * normal_vec
-                    
+                    #driving force
                     F_sprocket_3_drive = F_drive_mag*tangent_vec
                     # Transform force to body frame
                     F_body = IR_k_3.T @ (F_sprocket_3_out + F_sprocket_3_drive)
 
                     # add to body k. This also in theory should handle the case that more than 1 sprocket is hit.
-                    f_ext_body[k] = f_ext_body[k] + np.concatenate([np.zeros(3), F_body])
+                    f_ext_body[k][3:] += F_body
 
 
         # --- ATBI GATHER --- Now with external forces 
@@ -966,7 +809,7 @@ class MultiBodySystem:
                 pRc = np.eye(6)
                 cRp = pRc.T
             else:
-                pRc = links[k-1].joint.get_spatial_rotation(theta[k-1])
+                pRc = pRc_cache[k-1]
                 cRp = pRc.T 
 
             P = links[k].RBT @ pRc @ P_plus[k-1] @ cRp @ links[k].RBT.T + links[k].M
@@ -983,7 +826,7 @@ class MultiBodySystem:
 
         # --- 4. ATBI SCATTER ---
         for k in range(n, 0, -1):
-            pRc = links[k].joint.get_spatial_rotation(theta[k])
+            pRc = pRc_cache[k]
             cRp = pRc.T 
 
             A_plus = cRp @ links[k].RBT.T @ A[k+1]
@@ -991,7 +834,6 @@ class MultiBodySystem:
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
         return beta_dot[1:n+1], V, A, tau_bar, D, G
     
-
     def simulate(self, tspan, V_base, A_base, config="open", BG_params=None,Penalty_params=None):
         print(f"Simulation started ({config}-loop configuration)")
         start_time = time.perf_counter()
@@ -1019,32 +861,14 @@ class MultiBodySystem:
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for driver simulation.")
                 return self.get_state_dot_driver(t, state, V_base, A_base, BG_params)
-            elif config == "pentagon":
-                if BG_params is None:
-                    raise ValueError("BG_params must be provided for driver simulation.")
-                return self.get_state_dot_driver_pentagon(t, state, V_base, A_base, BG_params)
-            elif config == "driver_bottom":
-                if BG_params is None:
-                    raise ValueError("BG_params must be provided for driver simulation.")
-                return self.get_state_dot_driver_bottom(t, state, V_base, A_base, BG_params)
-            elif config == "driver_debug":
-                return self.get_state_dot_driver_debug(t, state, V_base, A_base, BG_params)
-            elif config == "unilateral_constraints":
-                return self.get_state_dot_unilateral_constraints(t, state, V_base, A_base)
             elif config == "multiple_constraints":
                 return self.get_state_dot_multiple_constraints(t, state, V_base, A_base, BG_params)
-            elif config == "wall_contact":
-                if BG_params is None:
-                    raise ValueError("BG_params must be provided for contact simulation.")
-                return self.get_state_dot_wall_contact(t, state, V_base, A_base, BG_params)
             elif config == "sprockets":
                 if Penalty_params is None: # You can pass this through the BG_params argument or make a new one
                     raise ValueError("penalty_params (k, c) must be provided.")
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for sprockets simulation.")
                 return self.get_state_dot_sprockets(t, state, V_base, A_base, BG_params, Penalty_params)
-            elif config == "wall_penalty_CL":
-                return self.get_state_dot_closed_penalty(t, state, V_base, A_base, BG_params, Penalty_params)
             else:
                 raise ValueError("Invalid config. Choose 'open', 'closed' or 'driver'.")
         
@@ -1053,7 +877,10 @@ class MultiBodySystem:
             t = tspan[i]
             y = Y[:, i]
 
+            self._record_metrics = True
             k1, V_val  = ODEfun(t, y, V_base, A_base)
+            self._record_metrics = False
+            
             self.V[i] = V_val
             self.beta_dot[i] = k1[self.total_nq:]
 
@@ -1067,7 +894,10 @@ class MultiBodySystem:
             if t % 1 < dt: 
                 print(f"t = {t:.2f} s")
         # Calc last V entry
+        self._record_metrics = True
         state_dot_last, V_last = ODEfun(tspan[-1], Y[:,-1], V_base, A_base)
+        self._record_metrics = False
+        
         self.V[-1] = V_last
         self.beta_dot[-1] = state_dot_last[self.total_nq:]
 
@@ -1076,7 +906,6 @@ class MultiBodySystem:
         end_time = time.perf_counter()
         elapesed_time = end_time - start_time
         print(f"Simulation finished. Runtime: {elapesed_time:.2f} s")
-
     
     def get_omega_diag(self,theta_list,tau_bar,D,n):
                 #storage
@@ -1109,7 +938,8 @@ class MultiBodySystem:
         return omega_diag
 
     def get_omega_ij(self, i, j, theta_list, tau_bar, omega_diag,n):
-        #calculates off diagonal entries not the MOST efficent as this may recalculate some entires, so essentially we are making more function calls than nessecarry. I right now i cant think of a way to fix this, but i know there is one
+        #calculates off diagonal entries not the MOST efficent as this may recalculate some entires, so essentially we are making more function calls than nessecarry. 
+        #THIS IS NOT ORDER N FOR ANYTHING MORE THAN A SINGULAR CONSTRAINT! - IN THAT CASE, MAKE ANOTHER FUNCTION THAT RETURNS AND ENTIRE LIST
         if i == j:
             return omega_diag[i]
         
@@ -1134,7 +964,6 @@ class MultiBodySystem:
         #det den roterer lever i frame j    
         return current_omega
   
-    def get_omega_column(self, i, theta_list, tau_bar, omega_diag):
         """
         Returns a dictionary of all off-diagonal Omegas for a given body i.
         Example: if i=3, returns {2: Omega_32, 1: Omega_31}
@@ -1674,6 +1503,50 @@ class MultiBodySystem:
             self.TE_delta[i] = KE_rel_t + PE_rel_t
 
         print("TE_delta calculated!")
+
+    def calc_and_plot_penetration(self):
+        """
+        Calculates and plots the maximum penetration depth of any joint into the sprockets over time.
+        """
+        if self.result is None:
+            raise ValueError("Simulation must be run before calculating penetration.")
+            
+        n = len(self.links)
+        nt = len(self.tspan)
+        max_penetrations = np.zeros(nt)
+        
+        for i in range(nt):
+            t = self.tspan[i]
+            state = self.result[:, i]
+            theta_list, _ = self.unpack_state(state)
+            positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+            
+            sprockets = (
+                 (np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]) , 2.12), # Left Sprocket
+                 (np.array([ 3.3, 0.0, 0.0]), 2.12)                      # Right Sprocket
+             )
+            #gammelt center np.array([-1.0-(0.23*min(t, 10.0))
+
+            max_pen = 0.0
+            for k in range(1, n+1):
+                pos = positions[k]
+                for center, radius in sprockets:
+                    dist = np.linalg.norm(pos - center)
+                    pen = radius - dist
+                    if pen > max_pen:
+                        max_pen = pen
+            max_penetrations[i] = max_pen
+            
+        self.penetration = max_penetrations
+        
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.tspan, max_penetrations * 1000, color='red', label='Max Penetration')
+        plt.xlabel('Time [s]')
+        plt.ylabel('Penetration Depth [mm]')
+        plt.title('Maximum Joint Penetration into Sprockets over Time')
+        plt.grid(True)
+        plt.legend()
+        plt.show()
 
     def get_all_rotations_body_to_I(self, theta_list):
         """

@@ -198,19 +198,41 @@ class MultiBodySystem:
         d = np.block([np.zeros((3,3)), np.eye(3)])
         Q = np.block([d, -d])
 
-        #OPERTATIONAL SPACE INERTIA
-        omega_diag, omega_n1, omega_1n = self.omega(theta_list,tau_bar,D,n)
+        # OLD CODE 
+        # #OPERTATIONAL SPACE INERTIA
+        # omega_diag, omega_n1, omega_1n = self.omega(theta_list,tau_bar,D,n)
 
-        #calculating block entires
-        Λ_11 = IR1 @ (link1.RBT.T @ omega_diag[1] @ link1.RBT) @IR1.T
-        Λ_nn = IRn @ (omega_diag[n] @ IRn.T)
+        # #calculating block entires
+        # Λ_11 = IR1 @ (link1.RBT.T @ omega_diag[1] @ link1.RBT) @IR1.T
+        # Λ_nn = IRn @ (omega_diag[n] @ IRn.T)
+        # Λ_n1 = IR1 @ (omega_n1 @ link1.RBT) @ IR1.T
+        # Λ_1n = IR1 @ (link1.RBT.T @ omega_1n) @ IR1.T
+
+
+        #nyt forsøg på noget ekstremt smart
+        omega_diag = self.get_omega_diag(theta_list,tau_bar,D,n)
+        omega_nn = omega_diag[n]
+        omega_11 = omega_diag[1]
+        
+
+        
+
+        omega_n1 = self.get_omega_ij(n,1,theta_list,tau_bar,omega_diag,n)
+
+        Λ_11 = IR1 @ (link1.RBT.T @ omega_11 @ link1.RBT) @IR1.T
+        Λ_nn = IRn @ (omega_nn @ IRn.T)
         Λ_n1 = IR1 @ (omega_n1 @ link1.RBT) @ IR1.T
-        Λ_1n = IR1 @ (link1.RBT.T @ omega_1n) @ IR1.T
 
+        
+    
         Λ_block = np.block([
-            [Λ_nn, Λ_n1.T],
-            [Λ_1n.T, Λ_11]
+            [Λ_11, Λ_n1.T],
+            [Λ_n1, Λ_nn]
         ])
+
+        V_tip = IR1@link1.RBT.T@V_f[1]
+        v_tip  = V_tip[3:]
+        v_base = IRn[:3, :3]@V_f[n][3:]
 
         positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
 
@@ -219,9 +241,10 @@ class MultiBodySystem:
 
         IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
     
-        Φ =  l_IOn - (l_IO1 + IR1[:3, :3]@link1.l_hinge)
-        Φ_dot = IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge)
-        Φ_ddot =  IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge)
+        Φ =  -(l_IOn - (l_IO1 + IR1[:3, :3]@link1.l_hinge))
+        #Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
+        Φ_dot =   v_tip - v_base
+        Φ_ddot =  -(IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge))
 
         # Baumgarte stabilization
         α, β = BG_params
@@ -230,16 +253,16 @@ class MultiBodySystem:
         #solving for lagrange multipliers
         #λ = -np.linalg.solve((Q@Λ_block@Q.T),f)
         
-        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
-
+        λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
+        print(f"{np.linalg.norm(Φ):.1e}")
         #calculating f_c
         f_c_closed_loop_const = -Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
 
         #constraints and Q are ordered [tip, base]
 
-        f_c[n] = IRn.T @ f_c_closed_loop_const[:6]
-        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const[6:] 
+        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const[:6] 
+        f_c[n] = IRn.T @ f_c_closed_loop_const[6:]
 
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
@@ -321,8 +344,6 @@ class MultiBodySystem:
 
 
 
-
-
         # HOLDING CONSTRAINT
         #calculating block entires
         IR1 = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)
@@ -349,12 +370,6 @@ class MultiBodySystem:
 
         f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const_h
 
-
-
-
-
-
-
         #calculating beta_dot_delta
         beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
 
@@ -367,6 +382,248 @@ class MultiBodySystem:
 
         return state_dot, V_f
 
+    def get_state_dot_sprockets(self,t,state,V_base,A_base,BG_params,Penalty_params):
+        theta_list, beta_list = self.unpack_state(state)
+        n = len(self.links)
+
+        #generalized forced are usedto simulate damping
+        damping = 0.1
+        tau_list = [-damping * beta for beta in beta_list]
+    
+
+        #CALCULATION OF THETA_DOT
+        theta_dot_list = []
+
+        for i in range(len(self.links)):
+            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i]) #CAN CHANGE THIS TO PREALLOCATE FOR SPEED OPTIMIZATION!
+            theta_dot_list.append(theta_dot)
+
+
+        #positons and rotations. Needed for constraints and penalty
+        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+        IR_list = self.get_all_rotations_body_to_I(theta_list)
+
+        #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC) - WITH PENALTY!
+        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI_penalty(t,theta_list,beta_list,tau_list,V_base,A_base,positions,IR_list,Penalty_params=Penalty_params)
+
+        #ROTATIONS AND CONSTRAINT SETUPS
+        link1 = self.links[0]
+        linkn = self.links[-1]
+
+        IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
+        IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
+
+        d = np.block([np.zeros((3,3)), np.eye(3)])
+        Q = np.block([d, -d])
+
+
+        omega_diag = self.get_omega_diag(theta_list,tau_bar,D,n)
+        omega_nn = omega_diag[n]
+        omega_11 = omega_diag[1]
+        
+        omega_n1 = self.get_omega_ij(n,1,theta_list,tau_bar,omega_diag,n)
+
+        Λ_11 = IR1 @ (link1.RBT.T @ omega_11 @ link1.RBT) @IR1.T
+        Λ_nn = IRn @ (omega_nn @ IRn.T)
+        Λ_n1 = IR1 @ (omega_n1 @ link1.RBT) @ IR1.T
+
+        
+    
+        Λ_block = np.block([
+            [Λ_11, Λ_n1.T],
+            [Λ_n1, Λ_nn]
+        ])
+
+        V_tip = IR1@link1.RBT.T@V_f[1]
+        v_tip  = V_tip[3:]
+        v_base = IRn[:3, :3]@V_f[n][3:]
+
+
+        l_IO1 = positions[1]
+        l_IOn = positions[n]
+
+        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
+    
+        Φ =  -(l_IOn - (l_IO1 + IR1[:3, :3]@link1.l_hinge))
+        #Φ_dot = -(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
+        Φ_dot =   v_tip - v_base
+        Φ_ddot =  -(IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge))
+
+        # Baumgarte stabilization
+        alpha, beta = BG_params
+        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, alpha, beta)
+
+        #solving for lagrange multipliers
+        #λ = -np.linalg.solve((Q@Λ_block@Q.T),f)
+        
+        λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
+        #calculating f_c
+        f_c_closed_loop_const = -Q.T@λ
+        f_c = [np.zeros(6,) for _ in range(n+2)]
+
+        #constraints and Q are ordered [tip, base]
+
+        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const[:6] 
+        f_c[n] = IRn.T @ f_c_closed_loop_const[6:]
+
+        #calculating beta_dot_delta
+        beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
+
+        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
+
+        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        return state_dot, V_f
+
+    def get_state_dot_multiple_constraints(self,t,state,V_base,A_base,BG_params):
+        #Previous implementation was not physical, it did not account for the cross-coupling between constrints and simply solved them independently. This is not correct. 
+
+        #to test multiple constraints a n=3 body pendulum will be implemented. The two constraints are
+            #1. Closed loop constraint between 1-3
+            #2. A driving constraint on k=2
+                #important note: This is not efficient at all, as the simulation scales with n_c³.
+                #The resulting lambda matrix will be 6*n_c X 6_n_c - that is it will be 18x18. Similarly, we will have to stack Q matrices and Lambda matrices. Q will be a 6x18 matrix.
+        
+
+        #unpacking state and getting
+        theta_list, beta_list = self.unpack_state(state)
+        n = len(self.links)
+
+        #generalized forces (set to 0 for now, could be used if wanted)
+        damping = 0.0
+        tau_list = [-damping * beta for beta in beta_list]
+
+        #CALCULATION OF THETA_DOT
+        theta_dot_list = []
+
+        for i in range(len(self.links)):
+            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i]) #CAN CHANGE THIS TO PREALLOCATE FOR SPEED OPTIMIZATION!
+            theta_dot_list.append(theta_dot)
+
+        #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC)
+        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
+
+        #compute positions of all 3 links
+        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+        l_IO1 = positions[1]
+        l_IO2 = positions[2]
+        l_IOn = positions[n]
+        
+
+        #compute needed rotations
+        #rotations. To keep general for now, we simply use notation that n=3. 
+        linkn = self.links[-1]
+        link1 = self.links[0]
+        link2 = self.links[1]
+        IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
+        IR2 = SOA.get_rotation_body_to_I(theta_list,self.links,n,2)
+        IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
+        
+
+        #constraint 1 setup - Closed Loop between 1 and 3
+        Q_closed = np.block([np.zeros((3,3)), np.eye(3),np.zeros((3,3)),np.zeros((3,3)),np.zeros((3,3)),-np.eye(3)]) #how to set this up check my paper handwriting. I think it could be a good idea to draw this in as an example.
+
+        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
+
+
+        Φ_closed =  -1*(l_IOn - (l_IO1 + IR1[:3, :3]@link1.l_hinge))
+        Φ_closed_dot = -1*(IRn[:3, :3]@V_f[n][3:]  - (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge))
+        Φ_closed_ddot =  -1*(IRn[:3, :3]@A_f[n][3:] - (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge))
+
+        #constraint 2 setup - Driver on link 2. in x-z plane
+
+        Q_driver = np.block([np.zeros((3,3)), np.zeros((3,3)),np.zeros((3,3)),np.eye(3),np.zeros((3,3)),np.zeros((3,3))])
+
+        IR2_3 = IR2[:3,:3]
+
+        omega = np.pi
+        length = np.linalg.norm(l_IO2 - l_IO1)
+
+        l_driver = np.array([length*np.cos(omega*t),0,length*np.sin(omega*t)])
+        l_driver_dot = np.array([-omega*length*np.sin(omega*t),0,omega*length*np.cos(omega*t)])
+        l_driver_ddot = np.array([-omega**2*length*np.cos(omega*t),0,-omega**2*length*np.sin(omega*t)])
+
+        Φ_driver = l_IO2  - l_driver
+        Φ_driver_dot = IR2_3@V_f[2][3:] - l_driver_dot
+        Φ_driver_ddot = IR2_3@A_f[2][3:]- l_driver_ddot
+
+        #Calculating operational spatial space compliance entires. Needed are Ω(1,1), Ω(2,2), Ω(3,3), Ω(2,1), Ω(3,1), Ω(3,2). 
+        #In this computation, we actually end up building the full Ω matrix using the omega function - this is not generally needed when more links are added, as the non-needed entries are then simply not calculated :)
+
+        #calculation of Ω(1,1), Ω(2,2), Ω(3,3)
+        omega_diag = self.get_omega_diag(theta_list,tau_bar,D,n)
+        Ω_11 = omega_diag[1]
+        Ω_22 = omega_diag[2]
+        Ω_33 = omega_diag[n]
+
+        #calculation og off diagonal terms <--- HVIS DER ER EN FEJL SÅ START HER BED OMEGA UDREGNINGERNE (jeg har debugget de virker lowkey)
+        Ω_21 = self.get_omega_ij(2, 1, theta_list, tau_bar, omega_diag,n)
+        Ω_31 = self.get_omega_ij(3, 1, theta_list, tau_bar, omega_diag,n)
+        Ω_32 = self.get_omega_ij(3, 2, theta_list, tau_bar, omega_diag,n) #jeg vil jo mene at 32 bliver regnet for at regne 31, så man skal måske bare retunere en liste med dem ned af
+
+        #time to build lambda matrix. Block entires are calculated
+        #constraint 1 - closed loop
+        Λ_11 = IR1 @ (link1.RBT.T @ Ω_11 @ link1.RBT) @IR1.T
+        Λ_33 = IRn @ (Ω_33 @ IRn.T)
+        Λ_31 = IR1 @ (Ω_31 @ link1.RBT) @ IR1.T
+        Λ_13 = IR1 @ (link1.RBT.T @ Ω_31.T) @ IR1.T
+
+        #constraint 2 - driver. Driving the base of the link here
+        Λ_22 = IR2 @ (Ω_22 @ IR2.T)
+
+        #cross couplings
+        Λ_21 = IR1 @ (Ω_21 @ link1.RBT) @ IR1.T
+        Λ_12 = IR1 @ (link1.RBT.T @ Ω_21.T) @ IR1.T
+        Λ_32 = IR2 @ (Ω_32 @ IR2.T)
+        Λ_23 = IR2 @ (Ω_32.T @ IR2.T)
+
+        #assembling system quantities
+
+        Λ_sys = np.block([
+            [Λ_11, Λ_12, Λ_13],
+            [Λ_21, Λ_22, Λ_23],
+            [Λ_31, Λ_32, Λ_33]
+        ])
+
+        Q_sys = np.block([
+            [Q_closed],
+            [Q_driver]
+        ])
+        
+        Φ_system = np.concatenate([Φ_closed, Φ_driver])
+
+        Φ_dot_system = np.concatenate([Φ_closed_dot, Φ_driver_dot])
+        Φ_ddot_system = np.concatenate([Φ_closed_ddot, Φ_driver_ddot])
+
+        #Baumgarte stabilization    
+
+        α, β = BG_params
+        Φ_BG = SOA.baumgarte_stab(Φ_system, Φ_dot_system, Φ_ddot_system, α, β)
+        print(np.linalg.norm(Φ_system))
+        #solving for lagrange multipliers
+        
+        M_eff = Q_sys @ Λ_sys @ Q_sys.T
+        λ = -np.linalg.solve(M_eff, Φ_BG)
+    
+
+        #calculating f_c
+        f_const = -Q_sys.T@λ
+        f_c = [np.zeros(6,) for _ in range(n+2)]
+
+        #constraints and Q are ordered [tip, base]
+        f_c[1] = link1.RBT @ IR1.T @ f_const[:6]
+        f_c[2] = IR2.T @ f_const[6:12]
+        f_c[n] = IRn.T @ f_const[12:]
+
+        #calculating beta_dot_delta
+        beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
+
+        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
+
+        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        return state_dot, V_f
+    
     def run_ATBI(self,theta_list,beta_list,tau_list,V_base,A_base):
         n = len(self.links)
 
@@ -388,8 +645,8 @@ class MultiBodySystem:
         tau[0]     = np.zeros_like(tau[1])
         tau[n+1]   = np.zeros_like(tau[n])
 
-        P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic = \
-            [([None]*(n+2)) for _ in range(11)] 
+        P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic,pRc_cache = \
+            [([None]*(n+2)) for _ in range(12)] 
             
         P_plus[0] = np.zeros((6,6))
         xi_plus[0] = np.zeros((6,))
@@ -401,6 +658,7 @@ class MultiBodySystem:
         # --- ATBI scatter ---- 
         for k in range(n, 0, -1):
             pRc = links[k].joint.get_spatial_rotation(theta[k]) 
+            pRc_cache[k] = pRc
             cRp = pRc.T 
 
             delta_V = links[k].joint.H.T @ beta[k]
@@ -415,7 +673,7 @@ class MultiBodySystem:
                 pRc = np.eye(6)
                 cRp = pRc.T
             else:
-                pRc = links[k-1].joint.get_spatial_rotation(theta[k-1])
+                pRc = pRc_cache[k-1]
                 cRp = pRc.T 
 
             P = links[k].RBT @ pRc @ P_plus[k-1] @ cRp @ links[k].RBT.T + links[k].M
@@ -431,16 +689,152 @@ class MultiBodySystem:
 
         # --- 4. ATBI SCATTER ---
         for k in range(n, 0, -1):
-            pRc = links[k].joint.get_spatial_rotation(theta[k])
+            pRc = pRc_cache[k]
             cRp = pRc.T 
 
             A_plus = cRp @ links[k].RBT.T @ A[k+1]
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
+        return beta_dot[1:n+1], V, A, tau_bar, D, G
+   
+    def run_ATBI_penalty(self,t,theta_list,beta_list,tau_list,V_base,A_base,positions,IR_list,Penalty_params):
+        #nice to have = sprockets as input
+        n = len(self.links)
 
+        theta = [None]*(n+2)
+        beta  = [None]*(n+2)
+        tau   = [None]*(n+2)
+        links = [None]*(n+2) 
+
+        for i in range(1, n+1):
+            theta[i] = theta_list[i-1]
+            beta[i]  = beta_list[i-1]
+            tau[i]   = tau_list[i-1]
+            links[i] = self.links[i-1]
+
+        theta[0]   = np.zeros_like(theta[1])
+        theta[n+1] = np.zeros_like(theta[n])
+        beta[0]    = np.zeros_like(beta[1])
+        beta[n+1]  = np.zeros_like(beta[n])
+        tau[0]     = np.zeros_like(tau[1])
+        tau[n+1]   = np.zeros_like(tau[n])
+
+        P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic,pRc_cache = \
+            [([None]*(n+2)) for _ in range(12)] 
+            
+        P_plus[0] = np.zeros((6,6))
+        xi_plus[0] = np.zeros((6,))
+        tau_bar[0] = np.zeros((6,6))
+            
+        A[n+1] = A_base
+        V[n+1] = V_base
+    
+        # --- ATBI scatter (Kinematics) ---- 
+        for k in range(n, 0, -1):
+            pRc = links[k].joint.get_spatial_rotation(theta[k]) 
+            pRc_cache[k] = pRc
+            cRp = pRc.T 
+
+            delta_V = links[k].joint.H.T @ beta[k]
+            V[k] = cRp @ links[k].RBT.T @ V[k+1] + delta_V
+
+            agothic[k] = SOA.spatialskewtilde(V[k]) @ links[k].joint.H.T @ beta[k]
+            bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
+        
+        # --- PENALTY DETECTION --- #
+        
+        #intializing external force array. This could contain any external forces, but for now, its purely used for the forces coming from sprockets
+        f_ext_body = [np.zeros(6,) for _ in range(n+2)]
+
+        # Unpack stiffness and damping
+        k_stiffness = Penalty_params[0]
+        c_damping = Penalty_params[1]
+
+        # ---- 5. GEOMETRY ----
+        # sprockets = [
+        #     {'center': np.array([-1.0-(0.235*min(t,10)), 0.0, 0.0]), 'radius': 2.125}, # Left Sprocket
+        #     {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.125}  # Right Sprocket
+        # ]
+
+        sprockets = [
+             {'center': np.array([-3.3, 0.0, 0.0]), 'radius': 2.125}, # Left Sprocket
+             {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.125}  # Right Sprocket
+         ]
+        for k in range(1,n+1):
+            IR_k = IR_list[k]  
+            IR_k_3 = IR_k[:3, :3]
+            pos = positions[k] #get current position of base of link k
+            base_vel = IR_k_3 @ V[k][3:] #get current velocity
+
+            #loop over sprockets. Right now there are two, but more can be added, thus a for loop is implemented
+            for sprocket in sprockets:
+                #calculating vector from sprocket center to current location aswell as distance
+                vec_from_sprocket_center = pos - sprocket['center']
+                distance = np.linalg.norm(vec_from_sprocket_center)
+
+                # distance between body and spocket radius. If this is negative, then we have penetration
+                d = distance - sprocket['radius']
+
+                if d < 0: # Penetration into the sprocket (also a little cheating on the driving)
+                    normal_vec = vec_from_sprocket_center / distance #normal vec - this is based on where the link is at the time, and NOT where it was during penetration
+                    #there is an argument for this being slightly inaccurate, but with a small enough dt the discreptency is expected to be rather small.
+                    
+                    tangent_vec = np.array([-normal_vec[2], 0.0, normal_vec[0]])
+                    d_dot = np.dot(normal_vec, base_vel)
+                    
+                    if t>5:
+                        F_drive_mag = 20.0
+                    else: 
+                        F_drive_mag = 0.0
+                    
+                    # Calculate pure spring compliant force and damping, pushing outward
+                    F_normal_mag = -k_stiffness * d - c_damping * d_dot
+                    if F_normal_mag < 0:
+                        F_normal_mag = 0.0
+                    
+                    # 3D force vector in inertial frame, purely along the normal
+                    F_sprocket_3_out = F_normal_mag * normal_vec
+                    
+                    F_sprocket_3_drive = F_drive_mag*tangent_vec
+                    # Transform force to body frame
+                    F_body = IR_k_3.T @ (F_sprocket_3_out + F_sprocket_3_drive)
+
+                    # add to body k. This also in theory should handle the case that more than 1 sprocket is hit.
+                    f_ext_body[k][3:] += F_body
+
+
+        # --- ATBI GATHER --- Now with external forces 
+        for k in range(1, n+1): 
+            if k == 1:
+                pRc = np.eye(6)
+                cRp = pRc.T
+            else:
+                pRc = pRc_cache[k-1]
+                cRp = pRc.T 
+
+            P = links[k].RBT @ pRc @ P_plus[k-1] @ cRp @ links[k].RBT.T + links[k].M
+            D[k] = links[k].joint.H @ P @ links[k].joint.H.T
+            G[k] = np.linalg.solve(D[k], links[k].joint.H @ P).T 
+            tau_bar[k] = np.eye(6) - G[k] @ links[k].joint.H
+            P_plus[k] = tau_bar[k] @ P
+            # We incorporate our spatial penalty forces here as in algorithm from Jain (might need a bit of explenaton in the paper)
+            xi = links[k].RBT @ pRc @ xi_plus[k-1] + P @ agothic[k] + bgothic[k] - f_ext_body[k] 
+                    
+            eps = tau[k] - links[k].joint.H @ xi
+            nu[k] = np.linalg.solve(D[k], eps) 
+            xi_plus[k] = xi + G[k] @ eps
+
+        # --- 4. ATBI SCATTER ---
+        for k in range(n, 0, -1):
+            pRc = pRc_cache[k]
+            cRp = pRc.T 
+
+            A_plus = cRp @ links[k].RBT.T @ A[k+1]
+            beta_dot[k] = nu[k] - G[k].T @ A_plus
+            A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
         return beta_dot[1:n+1], V, A, tau_bar, D, G
     
-    def simulate(self, tspan, V_base, A_base, config="open", BG_params=None):
+    def simulate(self, tspan, V_base, A_base, config="open", BG_params=None,Penalty_params=None):
         print(f"Simulation started ({config}-loop configuration)")
         start_time = time.perf_counter()
 
@@ -455,7 +849,6 @@ class MultiBodySystem:
         Y[:, 0] = state0
         self.V = [None]*nt #to be able to save spatial velocities
         self.beta_dot = [None]*nt
-
         # Dynamically route the derivative calculation based on config
         def ODEfun(t, state, V_base, A_base):
             if config == "closed":
@@ -468,14 +861,14 @@ class MultiBodySystem:
                 if BG_params is None:
                     raise ValueError("BG_params must be provided for driver simulation.")
                 return self.get_state_dot_driver(t, state, V_base, A_base, BG_params)
-            elif config == "pentagon":
+            elif config == "multiple_constraints":
+                return self.get_state_dot_multiple_constraints(t, state, V_base, A_base, BG_params)
+            elif config == "sprockets":
+                if Penalty_params is None: # You can pass this through the BG_params argument or make a new one
+                    raise ValueError("penalty_params (k, c) must be provided.")
                 if BG_params is None:
-                    raise ValueError("BG_params must be provided for driver simulation.")
-                return self.get_state_dot_driver_pentagon(t, state, V_base, A_base, BG_params)
-            elif config == "driver_bottom":
-                if BG_params is None:
-                    raise ValueError("BG_params must be provided for driver simulation.")
-                return self.get_state_dot_driver_bottom(t, state, V_base, A_base, BG_params)
+                    raise ValueError("BG_params must be provided for sprockets simulation.")
+                return self.get_state_dot_sprockets(t, state, V_base, A_base, BG_params, Penalty_params)
             else:
                 raise ValueError("Invalid config. Choose 'open', 'closed' or 'driver'.")
         
@@ -488,16 +881,15 @@ class MultiBodySystem:
             self.V[i] = V_val
             self.beta_dot[i] = k1[self.total_nq:]
 
-            k2,_  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
-            k3,_  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
-            k4,_  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
+            k2, _  = ODEfun(t + dt/2, y + dt/2 * k1, V_base, A_base)
+            k3, _  = ODEfun(t + dt/2.0, y + dt/2.0 * k2, V_base, A_base)
+            k4, _  = ODEfun(t + dt, y + dt * k3, V_base, A_base)
 
             Y[:, i+1] = y + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
 
             # Robust way to print every 1 second of simulation time
             if t % 1 < dt: 
                 print(f"t = {t:.2f} s")
-
         # Calc last V entry
         state_dot_last, V_last = ODEfun(tspan[-1], Y[:,-1], V_base, A_base)
         self.V[-1] = V_last
@@ -508,7 +900,7 @@ class MultiBodySystem:
         end_time = time.perf_counter()
         elapesed_time = end_time - start_time
         print(f"Simulation finished. Runtime: {elapesed_time:.2f} s")
-
+    
     def simulate_own_RK4(self, tspan, V_base, A_base, config="open", BG_params=None):
         # print(f"Simulation started ({config}-loop configuration)")
         # start_time = time.perf_counter()
@@ -630,8 +1022,9 @@ class MultiBodySystem:
         # elapsed_time = end_time - start_time
         # print(f"Simulation finished. Runtime: {elapsed_time:.2f} s")
 
-    def omega(self,theta_list,tau_bar,D,n):
-        #storage
+  
+    def get_omega_diag(self,theta_list,tau_bar,D,n):
+                #storage
         gamma = [None]*(n+2)
         omega = [None]*(n+2)
         theta = [None]*(n+2)
@@ -655,28 +1048,39 @@ class MultiBodySystem:
 
             gamma[k] = tau_bar[k].T @ cRp @ link_k.RBT.T @ gamma[k+1] @ link_k.RBT @ pRc @ tau_bar[k] + link_k.joint.H.T @ np.linalg.solve(D[k],link_k.joint.H)
 
-        #assigning them
-        omega[n] = gamma[n]
-
-        #calcualting off diagonal entries (and also inserting the one on the diagonal
-        for k in range(n-1,0,-1):
-            link_k = self.links[k-1] #remember, links is on a 0-index
-
-            #rotations
-            pRc = link_k.joint.get_spatial_rotation(theta[k])
-            cRp = pRc.T
-
-            omega[k] = cRp @ omega[k+1] @ link_k.RBT @ pRc @ tau_bar[k]
-        
-        #assigning calculated omegas
-        omega_n1 = omega[1]
-        omega_1n = omega_n1.T
-
-        #all digonals of omega:
+        #renaminmg for readability
         omega_diag = gamma
 
-        return omega_diag, omega_n1, omega_1n
+        return omega_diag
+
+    def get_omega_ij(self, i, j, theta_list, tau_bar, omega_diag,n):
+        #calculates off diagonal entries not the MOST efficent as this may recalculate some entires, so essentially we are making more function calls than nessecarry. 
+        #THIS IS NOT ORDER N FOR ANYTHING MORE THAN A SINGULAR CONSTRAINT! - IN THAT CASE, MAKE ANOTHER FUNCTION THAT RETURNS AND ENTIRE LIST
+        if i == j:
+            return omega_diag[i]
+        
+        if i < j:
+            # Omega is symmetric: Omega_{i, j} = Omega_{j, i}^T
+            return self.get_omega_ij(j, i, theta_list, tau_bar, omega_diag,n).T
+            
+        current_omega = omega_diag[i]
+        
+        # Shift theta to 1-based indexing for convenience
+        theta = [None]*(len(self.links)+2)
+
+        for idx in range(1,n+1):
+            theta[idx] = theta_list[idx-1]
+            
+        # Propagate from body i-1 down to j
+        for k in range(i-1, j-1, -1):
+            link_k = self.links[k-1]
+            pRc = link_k.joint.get_spatial_rotation(theta[k])
+            cRp = pRc.T
+            current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
+        #det den roterer lever i frame j    
+        return current_omega
   
+
     def beta_dot_delta(self,theta_list,tau_bar,D,f_c,G,n):
         #shifting indexing for convience (same method as in run_ATBI)
         n = len(self.links) #no of bodies
@@ -949,20 +1353,6 @@ class MultiBodySystem:
 
         return fig, ax
 
-    def circle_driver_xz_plane(self, r, t, omega, center, bias):
-        # Returns the driver components for the constraints equation
-        # args:
-        # r: radius of the circle
-        # t: time
-        # omega: angular velocity of the driver
-        # center: center of the circle (array-like of shape (3,))
-        # bias: the phase bias of the driver
-
-        Φ = np.array([center[0] + r * np.cos(omega * t + bias), 0, center[2] + r * np.sin(omega * t + bias)])
-        Φ_dot = np.array([-r * omega * np.sin(omega * t + bias), 0, r * omega * np.cos(omega * t + bias)])
-        Φ_ddot = np.array([-r * omega**2 * np.cos(omega * t + bias), 0, -r * omega**2 * np.sin(omega * t + bias)])
-
-        return Φ, Φ_dot, Φ_ddot
     
     def compute_com_pos_in_inertial_frame(self, theta):
         n = len(self.links)
@@ -1107,6 +1497,7 @@ class MultiBodySystem:
         return np.mean(self.TE_error)
 
     def CSV_creator(self, path, filename, *attr_names):
+
         # Made mainly by Gemini
         """
         Merges an arbitrary number of attributes (lists/arrays stored in self) 
@@ -1173,3 +1564,73 @@ class MultiBodySystem:
             writer.writerows(combined_data)
             
         print(f"Data successfully saved as {filename} in {path}.")
+
+    def calc_and_plot_penetration(self):
+        """
+        Calculates and plots the maximum penetration depth of any joint into the sprockets over time.
+        """
+        if self.result is None:
+            raise ValueError("Simulation must be run before calculating penetration.")
+            
+        n = len(self.links)
+        nt = len(self.tspan)
+        max_penetrations = np.zeros(nt)
+        
+        for i in range(nt):
+            t = self.tspan[i]
+            state = self.result[:, i]
+            theta_list, _ = self.unpack_state(state)
+            positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+            
+            # sprockets = (
+            #     (np.array([-1.0-(0.235*min(t, 10.0)), 0.0, 0.0]), 2.125), # Left Sprocket
+            #     (np.array([ 3.3, 0.0, 0.0]), 2.125)                      # Right Sprocket
+            # )
+            
+            sprockets = (
+                (np.array([-3.3, 0.0, 0.0]), 2.125), # Left Sprocket
+                (np.array([ 3.3, 0.0, 0.0]), 2.125)                      # Right Sprocket
+            )
+
+
+            max_pen = 0.0
+            for k in range(1, n+1):
+                pos = positions[k]
+                for center, radius in sprockets:
+                    dist = np.linalg.norm(pos - center)
+                    pen = radius - dist
+                    if pen > max_pen:
+                        max_pen = pen
+            max_penetrations[i] = max_pen
+            
+        self.penetration = max_penetrations
+        
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.tspan, max_penetrations * 1000, color='red', label='Max Penetration')
+        plt.xlabel('Time [s]')
+        plt.ylabel('Penetration Depth [mm]')
+        plt.title('Maximum Joint Penetration into Sprockets over Time')
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
+    def get_all_rotations_body_to_I(self, theta_list):
+        """
+        Computes the spatial rotation matrix from each body's frame to the inertial frame 
+        in a single O(n) sweep. Returns a 1-indexed list of 6x6 spatial rotation matrices.
+        """
+        n = len(self.links)
+        IR_list = [None] * (n + 1)
+        
+        # Start at the base (body n)
+        # Note: self.links and theta_list are 0-indexed, so body n is at index n-1
+        IR_cumulative = self.links[n-1].joint.get_spatial_rotation(theta_list[n-1])
+        IR_list[n] = IR_cumulative
+        
+        # Sweep down the chain from n-1 to the tip (1)
+        for k in range(n-1, 0, -1):
+            pRc = self.links[k-1].joint.get_spatial_rotation(theta_list[k-1])
+            IR_cumulative = IR_cumulative @ pRc  # Multiply parent's rotation by child's relative rotation
+            IR_list[k] = IR_cumulative
+            
+        return IR_list

@@ -14,8 +14,13 @@ A_base = np.zeros(6)
 A_base[-1] = 9.81  # Simulating gravity in z
 
 # Setup for validation
-n_bodies_list = [1] + list(range(2, 3, 1))
+n_start = 5
+n_end = 100
+step_length = 5
 repeats = 10
+
+n_bodies_list = [1] + list(range(n_start, n_end+1, step_length))
+
 
 # Initialize CSV file and write the header
 csv_filename = "Arbejdspakke2/order_n_val_results/solver_benchmark_results.csv"

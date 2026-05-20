@@ -60,9 +60,6 @@ def statistical_plot(csv_filename):
     plt.tight_layout()
     plt.show()
 
-import pandas as pd
-import matplotlib.pyplot as plt
-
 def plot_TE_delta(csv_filename):
     # 1. Load the data
     df = pd.read_csv(csv_filename)
