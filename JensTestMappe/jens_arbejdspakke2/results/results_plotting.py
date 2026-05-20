@@ -305,21 +305,70 @@ def adams_delta_pend(filename, adams_file_path=None):
     plt.tight_layout()
     plt.show()
 
-### CONFIG ###
-filename1 = "wall_contact_energies.csv"
-filename2 = "dp_gen_acc.csv"
+def plot_constraint_violation(filenames, bg_params_list, title="Constraint Violation vs. Baumgarte Parameters"):
+    """
+    Plots constraint violation from multiple CSV files on a single graph.
 
-# Resolve the absolute path relative to this script's location
-script_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(script_dir, "TE_delta.csv")
+    Args:
+        filenames (list of str): List of CSV filenames.
+        bg_params_list (list of list/tuple): List of [alpha, beta] pairs corresponding to each file.
+        title (str): The title for the plot.
+    """
+    if len(filenames) != len(bg_params_list):
+        raise ValueError("The number of filenames must match the number of Baumgarte parameter sets.")
 
-# Load the CSV data (assuming order: tspan, PE, KE, TE)
-data = np.loadtxt(file_path, delimiter=',')
-tspan, TE = data[:, 0], data[:, 1]
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    plt.figure(figsize=(12, 7))
 
-plt.plot(tspan,TE)
+    num_files = len(filenames)
+    for i, (filename, bg_params) in enumerate(zip(filenames, bg_params_list)):
+        file_path = os.path.join(script_dir, filename)
+        
+        try:
+            # Assuming CSV has two columns: tspan, violation
+            data = np.loadtxt(file_path, delimiter=',')
+            tspan, violation = data[:, 0], data[:, 1]
+            
+            # Find the index where time is >= 1.0 second to trim the plot
+            start_index = np.argmax(tspan >= 1.0)
+            
+            alpha, beta = bg_params
+            
+            # Make the last line dotted for emphasis
+            linestyle = '--' if i == num_files - 1 else '-'
+            # Plot only from the start_index onwards
+            plt.plot(tspan[start_index:], violation[start_index:], label=fr'$A={alpha}, B={beta}$', linestyle=linestyle)
 
-plot_all_energies(filename1)
+        except FileNotFoundError:
+            print(f"Warning: File not found at {file_path}. Skipping.")
+        except Exception as e:
+            print(f"Warning: Could not process {filename}. Error: {e}")
 
-plot_TE(filename1)
+    plt.xlabel("Time [s]")
+    plt.ylabel("Constraint Error Norm ||Φ|| [m]")
+    plt.yscale('log')
+    plt.grid(True, which="both", ls="--")
+    # Formatting
+    plt.xlabel("Time [s]", fontsize=14)
+    plt.ylabel("Energy [J]", fontsize=14)
+    plt.legend(loc='best', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
+    plt.grid(True, alpha=0.5)
 
+    plt.tick_params(axis='both', which='major', labelsize=12)
+    plt.tight_layout()
+    plt.show()
+
+
+# 1. List the CSV files you want to compare
+violation_files = [
+    "constraintviolation_BG=10_50.csv","constraintviolation_BG=100_100.csv","constraintviolation_BG=0.1_500.csv","constraintviolation_BG=50_500.csv"
+    # Add more files here, e.g., "constraintviolation_BG_10_100.csv"
+]
+# 2. List the corresponding Baumgarte parameters for each file
+bg_sets = [
+    [10,50],[100,100],[0.1,500],[50, 500]
+]
+
+# 3. Call the plotting function
+plot_constraint_violation(violation_files, bg_sets)

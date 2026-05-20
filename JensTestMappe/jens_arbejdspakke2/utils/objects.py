@@ -117,6 +117,8 @@ class MultiBodySystem:
         self.total_nw = 0
         self.result = None
         self.tspan = None
+        self.constraint_violation = []
+
 
     def add_link(self,link):
         self.links.insert(0, link)
@@ -267,6 +269,10 @@ class MultiBodySystem:
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        if self._record_metrics == True:
+            self.constraint_violation.append(np.linalg.norm(Φ))#for storage, can be uncommented if not in use
+
 
         return state_dot, V_f
 
@@ -871,7 +877,10 @@ class MultiBodySystem:
             t = tspan[i]
             y = Y[:, i]
 
+            self._record_metrics = True
             k1, V_val  = ODEfun(t, y, V_base, A_base)
+            self._record_metrics = False
+            
             self.V[i] = V_val
             self.beta_dot[i] = k1[self.total_nq:]
 
@@ -885,7 +894,10 @@ class MultiBodySystem:
             if t % 1 < dt: 
                 print(f"t = {t:.2f} s")
         # Calc last V entry
+        self._record_metrics = True
         state_dot_last, V_last = ODEfun(tspan[-1], Y[:,-1], V_base, A_base)
+        self._record_metrics = False
+        
         self.V[-1] = V_last
         self.beta_dot[-1] = state_dot_last[self.total_nq:]
 

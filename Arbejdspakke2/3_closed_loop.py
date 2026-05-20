@@ -42,7 +42,7 @@ A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 
 robot.plot_initial_state("closed")
 
-robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0,500])
+robot.simulate(tspan,V_base,A_base,"closed",BG_params=[20,300])
 
 # robot.calc_TE_delta()
 
