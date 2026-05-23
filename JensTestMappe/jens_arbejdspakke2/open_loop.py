@@ -16,7 +16,7 @@ joint1 = ob.SphericalJoint()
 
 #intialziing such that pendulum is hanging to the right
 
-joint3.q_init = SOA.quatfromrev(0.5*np.pi, "y")
+joint3.q_init = SOA.quatfromrev((3/4)*np.pi, "y")
 #defining link
 link3 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint3)
 link2 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint2)
@@ -29,30 +29,13 @@ robot.add_link(link2)
 robot.add_link(link2)
 robot.add_link(link2)
 robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
-robot.add_link(link2)
+
+
+
 
 
 #parameters for simulation
-tspan = np.arange(0,20,0.005)
+tspan = np.arange(0,10,0.005)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)

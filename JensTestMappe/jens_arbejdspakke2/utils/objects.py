@@ -210,9 +210,10 @@ class MultiBodySystem:
 
         #nyt forsøg på noget ekstremt smart
         omega_diag = self.get_omega_diag(theta_list,tau_bar,D,n)
+        omega_col_n = self.get_omega_ij_col(i, theta_list, tau_bar, omega_diag,n)
         omega_nn = omega_diag[n]
         omega_11 = omega_diag[1]
-        
+        omega_n1 = omega_col_n[1]
 
         
 
@@ -554,9 +555,12 @@ class MultiBodySystem:
         Ω_33 = omega_diag[n]
 
         #calculation og off diagonal terms <--- HVIS DER ER EN FEJL SÅ START HER BED OMEGA UDREGNINGERNE (jeg har debugget de virker lowkey)
-        Ω_21 = self.get_omega_ij(2, 1, theta_list, tau_bar, omega_diag,n)
-        Ω_31 = self.get_omega_ij(3, 1, theta_list, tau_bar, omega_diag,n)
-        Ω_32 = self.get_omega_ij(3, 2, theta_list, tau_bar, omega_diag,n) #jeg vil jo mene at 32 bliver regnet for at regne 31, så man skal måske bare retunere en liste med dem ned af
+        omega_col_n = self.get_omega_ij_col(n, theta_list, tau_bar, omega_diag,n)
+        omega_col_2 = self.get_omega_ij_col(2, theta_list, tau_bar, omega_diag,n)
+
+        Ω_21 = omega_col_2[1]
+        Ω_31 = omega_col_n[1]
+        Ω_32 = omega_col_n[2]
 
         #time to build lambda matrix. Block entires are calculated
         #constraint 1 - closed loop
@@ -963,34 +967,38 @@ class MultiBodySystem:
             current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
         #det den roterer lever i frame j    
         return current_omega
-  
-        """
-        Returns a dictionary of all off-diagonal Omegas for a given body i.
-        Example: if i=3, returns {2: Omega_32, 1: Omega_31}
-        """
-        omega_col = {}
-        current_omega = omega_diag[i]
-        
-        # Shift theta to 1-based indexing
-        n = len(self.links)
-        theta = [None] * (n + 2)
-        for idx in range(1, n + 1):
-            theta[idx] = theta_list[idx-1]
-            
-        # Sweep down from i-1 to 1, saving every step!
-        for k in range(i - 1, 0, -1):
-            link_k = self.links[k-1]
-            pRc = link_k.joint.get_spatial_rotation(theta[k])
-            cRp = pRc.T
-            
-            # Propagate one step down
-            current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
-            
-            # Save the result, because this IS Omega_{i, k}
-            omega_col[k] = current_omega
-            
-        return omega_col
 
+    def get_omega_ij_col(self, i, theta_list, tau_bar, omega_diag,n):
+            #calculates entire col instead of a single entry, thus is returns a column. This scales O(N*n_b) due to the fact, that it has to be called as many times as there are nodes of interest. i.e n_b = no. of nodes
+            #this is not a scaling issue for the closed loop, as it is only a single constraints. For efficient modelling of more than one constraint, maybe one should reconsider recoding this.
+            #It is however, more efficient than the default get_omega_ij, as it has better scaling.
+            #it returns a list thats indexed [omega(i,1), omega(i,2)...
+                
+
+            #IMPORTANT! IT ONLY PROPAGATES DOWNWARDS, SO YOU NEED TO HAVE i>j always.   
+            current_omega = omega_diag[i]
+            omega_col = [None]*(n+2)
+            
+            # Save the diagonal entry
+            omega_col[i] = current_omega
+            
+            # Shift theta to 1-based indexing for convenience
+            theta = [None]*(len(self.links)+2)
+
+            for idx in range(1,n+1):
+                theta[idx] = theta_list[idx-1]
+                
+            for k in range(i - 1, 0, -1):
+                link_k = self.links[k-1]
+                pRc = link_k.joint.get_spatial_rotation(theta[k])
+                cRp = pRc.T
+  
+                # Propagate one step down
+                current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
+            
+                # Save the result, because this IS Omega_{i, k}
+                omega_col[k] = current_omega
+            return omega_col
     def beta_dot_delta(self,theta_list,tau_bar,D,f_c,G,n):
         #shifting indexing for convience (same method as in run_ATBI)
         n = len(self.links) #no of bodies

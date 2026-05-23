@@ -347,7 +347,7 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
 
     plt.xlabel("Time [s]")
     plt.ylabel("Constraint Error Norm ||Φ|| [m]")
-    plt.yscale('log')
+    #plt.yscale('log')
     plt.grid(True, which="both", ls="--")
     # Formatting
     plt.xlabel("Time [s]", fontsize=14)
