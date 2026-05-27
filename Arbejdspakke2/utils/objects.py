@@ -1472,13 +1472,12 @@ class MultiBodySystem:
         ax.set(box_aspect=(1, 1, 1))
 
         state0 = self.get_initial_state()
-        theta_list ,_ = self.unpack_state(state0)
+        theta_list ,_ = self.unpack_state(state0) #theta_list start at 0, i.e. body 1 has index 0.
         positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
         
         # positions is constructed as a list of arrays, where the index 0 is empty. We can conveniently insert the tip of the last link as the first element in the list,
         # so we have all positions in one array.
         R3_tip2I = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)[:3,:3]
-        #R3_tip2I = R6_tip2I
         tip_pos = (positions[1] + R3_tip2I @ self.links[0].l_hinge).flatten()
         positions[0] = tip_pos
         pos_array = np.array(positions)     
@@ -1492,21 +1491,21 @@ class MultiBodySystem:
 
         return fig, ax
 
-    def compute_com_pos_in_inertial_frame(self, theta):
+    def compute_com_pos_in_inertial_frame(self, theta_list):
         n = len(self.links)
         
         positions = [None]*(n+1)
         com_positions = [None]*(n+1)
 
-        R_cumulative = self.links[n-1].joint.get_spatial_rotation(theta[n-1]) #initial rotation from body n to inertial frame
+        R_cumulative = self.links[n-1].joint.get_spatial_rotation(theta_list[n-1]) #initial rotation from body n to inertial frame
         R_cumulative = R_cumulative[:3,:3]
 
         #BC for position of base body
-        positions[n] = np.zeros(3)
+        positions[n] = self.links[n-1].joint.get_translation(theta_list[n-1])
         com_positions[n] = R_cumulative @ self.links[n-1].l_com
 
         for i in range(n-1,0,-1):
-            pRc = self.links[i-1].joint.get_spatial_rotation(theta[i-1]) # bc theta starts from 0
+            pRc = self.links[i-1].joint.get_spatial_rotation(theta_list[i-1]) # bc self.links and theta_list starts from 0
             pRc = pRc[:3,:3]
 
             positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge # self.links start from 0...
