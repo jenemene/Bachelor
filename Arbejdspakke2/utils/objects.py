@@ -536,7 +536,7 @@ class MultiBodySystem:
 
         IR2_3 = IR2[:3,:3]
 
-        omega = np.pi
+        omega = 2*np.pi/5
         length = np.linalg.norm(l_IO2 - l_IO1)
 
         l_driver = np.array([length*np.cos(omega*t),0,length*np.sin(omega*t)])
@@ -599,7 +599,7 @@ class MultiBodySystem:
 
         α, β = BG_params
         Φ_BG = SOA.baumgarte_stab(Φ_system, Φ_dot_system, Φ_ddot_system, α, β)
-        print(np.linalg.norm(Φ_system))
+        print(f"t={t:.2f}   |Φ|={np.linalg.norm(Φ_system):.2e}")
         #solving for lagrange multipliers
         
         M_eff = Q_sys @ Λ_sys @ Q_sys.T
@@ -1022,7 +1022,6 @@ class MultiBodySystem:
         # elapsed_time = end_time - start_time
         # print(f"Simulation finished. Runtime: {elapsed_time:.2f} s")
 
-  
     def get_omega_diag(self,theta_list,tau_bar,D,n):
                 #storage
         gamma = [None]*(n+2)
@@ -1079,7 +1078,6 @@ class MultiBodySystem:
             current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
         #det den roterer lever i frame j    
         return current_omega
-  
 
     def beta_dot_delta(self,theta_list,tau_bar,D,f_c,G,n):
         #shifting indexing for convience (same method as in run_ATBI)
@@ -1130,7 +1128,7 @@ class MultiBodySystem:
 
     def plot_gen_velocities(self, savefig=False):
         n = len(self.links)
-        idx = self.total_nq # Index where velocities start
+        idx_w = self.total_nq # Index where velocities start
 
         # Create figure for subplots - added gridspec_kw to leave space at the bottom for the legend
         fig, axes = plt.subplots(
@@ -1148,47 +1146,79 @@ class MultiBodySystem:
 
         for k in range(n):
             link = self.links[k]
-            nw = link.joint.nw 
-
-            beta_k = self.result[idx:idx + nw, :] 
+            nw = link.joint.nw
+            beta_k = self.result[idx_w:idx_w + nw, :] 
             tspan = self.tspan 
 
             ax_left = axes[k]
 
             # --- 6-DOF FREE JOINT ---
             if nw == 6: 
-                ax_right = ax_left.twinx() # Create the independent right-hand axis
+                ax_right = ax_left.twinx() # Create the independent right-hand axis                
 
                 # Angular (Left Axis, Solid Lines)
-                ax_left.plot(tspan, beta_k[0, :], color=colors[0], linestyle='-', label=r'$\beta_x$')
-                ax_left.plot(tspan, beta_k[1, :], color=colors[1], linestyle='-', label=r'$\beta_y$')
-                ax_left.plot(tspan, beta_k[2, :], color=colors[2], linestyle='-', label=r'$\beta_z$')
+                ax_left.plot(tspan, beta_k[0, :], color=colors[0], linestyle='-', label=r'$\beta_{\omega_x}$')
+                ax_left.plot(tspan, beta_k[1, :], color=colors[1], linestyle='-', label=r'$\beta_{\omega_y}$')
+                ax_left.plot(tspan, beta_k[2, :], color=colors[2], linestyle='-', label=r'$\beta_{\omega_z}$')
 
                 # Linear (Right Axis, Dashed Lines)
-                ax_right.plot(tspan, beta_k[3, :], color=colors[0], linestyle='--', label=r'$v_x$')
-                ax_right.plot(tspan, beta_k[4, :], color=colors[1], linestyle='--', label=r'$v_y$')
-                ax_right.plot(tspan, beta_k[5, :], color=colors[2], linestyle='--', label=r'$v_z$')
+                
+                ax_right.plot(tspan, beta_k[3, :], color=colors[0], linestyle='--', label=r'$\beta_{v_x}$')
+                ax_right.plot(tspan, beta_k[4, :], color=colors[1], linestyle='--', label=r'$\beta_{v_y}$')
+                ax_right.plot(tspan, beta_k[5, :], color=colors[2], linestyle='--', label=r'$\beta_{v_z}$')
 
                 # Independent Labels
                 ax_left.set_ylabel(f'Body {k+1} Ang\n[rad/s]', fontweight='bold')
                 ax_right.set_ylabel(f'Body {k+1} Lin\n[m/s]', fontweight='bold', rotation=270, labelpad=15)
 
+                # --- ALIGN ZEROS OF TWIN Y-AXES ---
+                # Force Matplotlib to calculate autoscale limits first
+                ax_left.relim()
+                ax_left.autoscale_view()
+                ax_right.relim()
+                ax_right.autoscale_view()
+
+                # Get current limits
+                l_min, l_max = ax_left.get_ylim()
+                r_min, r_max = ax_right.get_ylim()
+
+                # Find the scaling factor to match zero positions
+                # We balance the maximum proportion of the positive vs negative bounds
+                l_ratio = max(abs(l_min), 1e-6) / max(abs(l_max), 1e-6)
+                r_ratio = max(abs(r_min), 1e-6) / max(abs(r_max), 1e-6)
+
+                if l_ratio > r_ratio:
+                    # Adjust right axis limits to match left axis ratio
+                    if r_max > 0:
+                        r_min = -r_max * l_ratio
+                    else:
+                        r_max = -r_min / l_ratio
+                else:
+                    # Adjust left axis limits to match right axis ratio
+                    if l_max > 0:
+                        l_min = -l_max * r_ratio
+                    else:
+                        l_max = -l_min / r_ratio
+
+                ax_left.set_ylim(l_min, l_max)
+                ax_right.set_ylim(r_min, r_max)
+
             # --- 3-DOF SPHERICAL JOINT ---
             elif nw == 3: 
-                ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\beta_x$')
-                ax_left.plot(tspan, beta_k[1, :], color=colors[1], label=r'$\beta_y$')
-                ax_left.plot(tspan, beta_k[2, :], color=colors[2], label=r'$\beta_z$')
+                ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\beta_{\omega_x}$')
+                ax_left.plot(tspan, beta_k[1, :], color=colors[1], label=r'$\beta_{\omega_y}$')
+                ax_left.plot(tspan, beta_k[2, :], color=colors[2], label=r'$\beta_{\omega_z}$')
                 
                 ax_left.set_ylabel(f'Body {k+1}\n[rad/s]')
 
             # --- 1-DOF REVOLUTE JOINT ---
             elif nw == 1: 
                 if self.links[k].joint.axis == "x":
-                    ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\beta_x$')
+                    ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\beta_{\omega_x}$')
                 elif self.links[k].joint.axis == "y":
-                    ax_left.plot(tspan, beta_k[0, :], color=colors[1], label=r'$\beta_y$')
+                    ax_left.plot(tspan, beta_k[0, :], color=colors[1], label=r'$\beta_{\omega_y}$')
                 elif self.links[k].joint.axis == "z":
-                    ax_left.plot(tspan, beta_k[0, :], color=colors[2], label=r'$\beta_z$')
+                    ax_left.plot(tspan, beta_k[0, :], color=colors[2], label=r'$\beta_{\omega_z}$')
 
                 ax_left.set_ylabel(f'Body {k+1}\n[rad/s]')
 
@@ -1199,7 +1229,7 @@ class MultiBodySystem:
             ax_left.yaxis.set_major_formatter(formatter)
 
             # Update index to start at the next body's data
-            idx += nw
+            idx_w += nw
 
             # Shared grid settings
             ax_left.grid(True, alpha=0.3)
@@ -1306,6 +1336,115 @@ class MultiBodySystem:
         plt.show()
         return ani
 
+    def plot_static_snapshots_grid(self, num_snapshots=6, config="closed"):
+        assert self.result is not None, "No simulation result found. Please run simulation first."
+
+        total_frames = self.result.shape[1]
+        snapshot_indices = np.linspace(0, total_frames - 1, num_snapshots, dtype=int)
+
+        ncols = 3
+        nrows = int(np.ceil(num_snapshots / ncols))
+        
+        # Adjusted figure size to fit a tight 2x3 horizontal grid seamlessly
+        fig = plt.figure(figsize=(11, 7.5))
+
+        def compute_positions(state_k):
+            theta_list, _ = self.unpack_state(state_k)
+            positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, len(self.links))
+            R3_tip2I = SOA.get_rotation_tip_to_body_I(theta_list, self.links, len(self.links))[:3, :3]
+            tip_pos = (positions[1] + R3_tip2I @ self.links[0].l_hinge).flatten()
+            positions[0] = tip_pos
+            return np.array(positions)
+
+        # --- AUTOMATIC BOUNDING BOX ZOOM ---
+        all_x, all_z = [], []
+        for f in range(total_frames):
+            pos = compute_positions(self.result[:, f])
+            all_x.extend(pos[:, 0])
+            all_z.extend(pos[:, 2])
+            
+        max_range = max(max(all_x) - min(all_x), max(all_z) - min(all_z))
+        mid_x = (max(all_x) + min(all_x)) / 2
+        mid_z = (max(all_z) + min(all_z)) / 2
+        
+        # Tightened padding margin from 0.55 down to 0.51 to pull the borders closer to the motion limits
+        padding = max_range * 0.51  
+        xlims = [mid_x - padding, mid_x + padding]
+        zlims = [mid_z - padding, mid_z + padding]
+
+        # --- FIX: HARDCODED PERFECT DRIVER CIRCLE ---
+        # Centered exactly at (0,0) with a physical radius of 0.2 as specified
+        driver_center_x = 0.0
+        driver_center_z = 0.0
+        driver_radius = 0.2
+
+        angles = np.linspace(0, 2 * np.pi, 100)
+        circle_x = driver_center_x + driver_radius * np.cos(angles)
+        circle_z = driver_center_z + driver_radius * np.sin(angles)
+
+        # --- TRAJECTORY PATH FOR THE RED POINT ---
+        body3_trajectory = np.array([compute_positions(self.result[:, f])[0] for f in range(total_frames)])
+
+        for idx, frame_idx in enumerate(snapshot_indices):
+            ax = fig.add_subplot(nrows, ncols, idx + 1, projection='3d')
+            
+            # --- DRAW LIGHT GREY DRIVER CIRCLE ---
+            ax.plot(circle_x, [0]*100, circle_z, color='#d8d8d8', linestyle='-', lw=1.2, zorder=1)
+
+            # --- DRAW CONTINUOUS PATH TRACE ---
+            if frame_idx > 0:
+                past_path = body3_trajectory[:frame_idx+1]
+                ax.plot(past_path[:, 0], past_path[:, 1], past_path[:, 2], 
+                        color='crimson', linestyle='-', alpha=0.3, lw=1.5, zorder=2)
+
+            current_state = self.result[:, frame_idx]
+            current_pos = compute_positions(current_state)
+            
+            # --- DRAW MECHANISM LINKS ---
+            ax.plot(current_pos[:, 0], current_pos[:, 1], current_pos[:, 2], 
+                    'o-', color='C0', lw=2.5, markersize=4.5, zorder=3)
+            
+            ax.plot([current_pos[-1, 0], current_pos[0, 0]], 
+                    [current_pos[-1, 1], current_pos[0, 1]], 
+                    [current_pos[-1, 2], current_pos[0, 2]], 
+                    'o-', color='C0', lw=2.5, markersize=4.5, zorder=3)
+
+            # --- HIGHLIGHT ORIGIN NODE IN RED ---
+            ax.plot([current_pos[0, 0]], [current_pos[0, 1]], [current_pos[0, 2]], 
+                    'o', color='crimson', markersize=6.5, zorder=5)
+
+            # --- VIEWPORT SETTINGS ---
+            ax.set_xlim(xlims)
+            ax.set_ylim([-padding, padding])
+            ax.set_zlim(zlims)
+            ax.view_init(elev=0, azim=-90, roll=0)
+            ax.set(box_aspect=(1, 1, 1))
+            
+            # --- ELIMINATE 3D PERSPECTIVE ARTIFACTS ---
+            ax.grid(False)
+            ax.set_axis_off() 
+            ax.xaxis.line.set_linewidth(0)
+            ax.yaxis.line.set_linewidth(0)
+            ax.zaxis.line.set_linewidth(0)
+
+            # --- BLACK BORDERS & DARK GREY CROSSHAIRS ---
+            box_x = [xlims[0], xlims[1], xlims[1], xlims[0], xlims[0]]
+            box_z = [zlims[0], zlims[0], zlims[1], zlims[1], zlims[0]]
+            ax.plot(box_x, [0]*5, box_z, color='#000000', lw=1.2, zorder=4) 
+
+            ax.plot(xlims, [0, 0], [0, 0], color='#444444', linestyle='--', alpha=0.25, lw=0.8, zorder=1)
+            ax.plot([0, 0], [0, 0], zlims, color='#444444', linestyle='--', alpha=0.25, lw=0.8, zorder=1)
+
+            # --- TITLE ---
+            # Positioned tightly near the top edge of the black boundary line
+            ax.set_title(f"t = {self.tspan[frame_idx]:.2f} s", fontsize=11, y=0.94, weight='bold', color='#222222')
+                
+        # --- FIX: AGGRESSIVE SPACE COMPRESSION ---
+        # subplots_adjust forces the subplots to stretch closer to each other, cutting out the dead margins.
+        # wspace and hspace control the horizontal and vertical gap sizes directly.
+        plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.92, wspace=0.05, hspace=0.15)
+        plt.show()
+
     def plot_initial_state(self, config="openclosed"):
         # Number of bodies and time steps
         n = len(self.links)
@@ -1353,7 +1492,6 @@ class MultiBodySystem:
 
         return fig, ax
 
-    
     def compute_com_pos_in_inertial_frame(self, theta):
         n = len(self.links)
         
