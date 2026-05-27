@@ -1,0 +1,59 @@
+#imports
+import numpy as np
+from utils import objects as ob
+from utils import soa as SOA
+import matplotlib.pyplot as plt
+import time
+
+#intializing multibodysystem
+robot = ob.MultiBodySystem()
+
+#defining joints
+
+joint3 = ob.RevoluteJoint("y")
+joint2 = ob.RevoluteJoint("y")
+joint1 = ob.RevoluteJoint("y")
+
+
+#intialziing such that pendulum is hanging to the right
+
+joint3.q_init = np.array([0.5*np.pi])
+joint2.q_init = np.array([2*np.pi/3])
+joint1.q_init = np.array([2*np.pi/3])
+
+#defining link
+mass = 2
+link3_fixed= ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
+link2 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint2)
+link1 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
+
+
+#adding link (first link is added to the base, second link is added to the first link and so on)
+robot.add_link(link3_fixed)
+robot.add_link(link2)
+robot.add_link(link1)
+
+#parameters for simulation
+dt = 0.005
+end_time = 10
+tspan = np.arange(0, end_time + dt/2, dt) # dt/2 to include end_time
+
+V_base = np.zeros(6)
+A_base = np.zeros(6)
+A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
+
+
+robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0.1,500])
+
+# robot.calc_TE_delta()
+
+path = "JensTestMappe/jens_arbejdspakke2/results"
+file_name = "constraintviolation_BG=0.1_500"
+#robot.CSV_creator(path, file_name, "tspan", "constraint_violation")
+
+
+plt.plot(tspan,robot.constraint_violation)
+plt.grid()
+plt.show()
+
+#robot.animation(config="closed",step=5)
