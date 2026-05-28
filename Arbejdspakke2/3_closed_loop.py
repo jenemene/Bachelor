@@ -25,9 +25,13 @@ link3_fixed= ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint3_fixe
 link2 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint2)
 link1 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
 
+#if free joint is wanted
+joint3 = ob.FreeJoint()
+link3 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
+
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
-robot.add_link(link3_fixed)
+robot.add_link(link3)
 robot.add_link(link2)
 robot.add_link(link1)
 

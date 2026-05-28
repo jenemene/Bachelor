@@ -74,7 +74,7 @@ robot.plot_initial_state("closed")
 robot.simulate(
     tspan, V_base, A_base, 
     config="sprockets", 
-    BG_params=[0, 800], 
+    BG_params=[0.1, 800], 
     Penalty_params=[5e6, 4000]
 )
 #old penalty Penalty_params=[1e7, 4000] but does not work for this large timestep

@@ -36,7 +36,7 @@ robot.add_link(link2)
 robot.add_link(link1)
 
 #parameters for simulation
-tspan = np.arange(0,5,0.01)
+tspan = np.arange(0,5,0.001)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -46,7 +46,7 @@ A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 robot.plot_initial_state("closed")
 
 
-robot.simulate(tspan,V_base,A_base,"multiple_constraints",BG_params=[100,200])
+robot.simulate(tspan,V_base,A_base,"multiple_constraints",BG_params=[0.1,500])
 
 
 #robot.plot_gen_velocities()

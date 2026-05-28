@@ -399,9 +399,10 @@ def get_rotation_body_to_I(theta_list, links, n, body_index):
 
     return R
 
+
 def compute_pos_in_inertial_frame(theta_list, links, n):
 
-    positions = [None]*(n+1)
+    positions = [None]*(n+1) # allow for index to match body
 
     #BC for position of base body
     positions[n] = links[n-1].joint.get_translation(theta_list[n-1])
@@ -413,7 +414,10 @@ def compute_pos_in_inertial_frame(theta_list, links, n):
         pRc = links[i-1].joint.get_spatial_rotation(theta_list[i-1])
         pRc = pRc[:3, :3]
 
-        positions[i] = positions[i+1] + R_cumulative @ links[i-1].l_hinge
+        #positions variable follows body index, but links does not, i.e. body 1 is index 0 in links.
+        #hence to get the position of body k, you take the position of body k+1 and add the vector from k+1 to k, l(k+1,k).
+        #but that vector is defined in link k+1. BUT since index for links starts from 0, it should be i and not i+1
+        positions[i] = positions[i+1] + R_cumulative @ links[i].l_hinge
 
         R_cumulative = R_cumulative @ pRc
 
