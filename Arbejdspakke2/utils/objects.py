@@ -661,8 +661,8 @@ class MultiBodySystem:
             pRc_cache[k] = pRc
             cRp = pRc.T 
 
-            delta_V = links[k].joint.H.T @ beta[k]
-            V[k] = cRp @ links[k].RBT.T @ V[k+1] + delta_V
+            delta_V_k = links[k].joint.H.T @ beta[k]
+            V[k] = cRp @ links[k].RBT.T @ V[k+1] + delta_V_k
 
             agothic[k] = SOA.spatialskewtilde(V[k]) @ links[k].joint.H.T @ beta[k]
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
@@ -1502,7 +1502,7 @@ class MultiBodySystem:
 
         #BC for position of base body
         positions[n] = self.links[n-1].joint.get_translation(theta_list[n-1])
-        com_positions[n] = R_cumulative @ self.links[n-1].l_com
+        com_positions[n] = positions[n] + R_cumulative @ self.links[n-1].l_com
 
         for i in range(n-1,0,-1):
             pRc = self.links[i-1].joint.get_spatial_rotation(theta_list[i-1]) # bc self.links and theta_list starts from 0
@@ -1771,3 +1771,21 @@ class MultiBodySystem:
             IR_list[k] = IR_cumulative
             
         return IR_list
+
+    def plot_attribute(self, attr_name):
+        """
+        A simple plot of a system attribute against time.
+
+        Args:
+            attr_name (str): The name of the attribute to plot.
+        """
+        if not hasattr(self, attr_name):
+            print(f"Error: Attribute '{attr_name}' not found in the system.")
+            return
+
+        y_data = getattr(self, attr_name)
+        plt.figure()
+        plt.plot(self.tspan, y_data)
+        plt.xlabel("Time [s]")
+        plt.show()
+        
