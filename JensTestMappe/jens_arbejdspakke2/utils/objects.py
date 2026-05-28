@@ -118,6 +118,8 @@ class MultiBodySystem:
         self.result = None
         self.tspan = None
         self.constraint_violation = []
+        self._record_metrics = False
+        self.l_from_origin = np.array([0,0,0])
 
 
     def add_link(self,link):
@@ -158,8 +160,9 @@ class MultiBodySystem:
         theta_list, beta_list = self.unpack_state(state)
 
         theta_dot_list = []
-
-        tau_list = [np.zeros(link.joint.nw) for link in self.links]
+        
+        damping = 0.0 #damping if one wants this
+        tau_list = [-damping * beta for beta in beta_list]
 
         for i in range(len(self.links)): #CAN CHANGE THIS TO PREALLOCATE FOR SPEED OPTIMIZATION! APPEND IS NOT EFFICIENT
             theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i])
@@ -213,11 +216,10 @@ class MultiBodySystem:
         omega_col_n = self.get_omega_ij_col(i, theta_list, tau_bar, omega_diag,n)
         omega_nn = omega_diag[n]
         omega_11 = omega_diag[1]
-        omega_n1 = omega_col_n[1]
+
+        omega_n1 = self.get_omega_ij(n,1,theta_list,tau_bar,omega_diag,n) #should live in frame 1
 
         
-
-        omega_n1 = self.get_omega_ij(n,1,theta_list,tau_bar,omega_diag,n)
 
         Λ_11 = IR1 @ (link1.RBT.T @ omega_11 @ link1.RBT) @IR1.T
         Λ_nn = IRn @ (omega_nn @ IRn.T)
@@ -253,7 +255,8 @@ class MultiBodySystem:
         #solving for lagrange multipliers
         #λ = -np.linalg.solve((Q@Λ_block@Q.T),f)
         
-        λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
+        M_eff = Q @ Λ_block @ Q.T
+        λ = -np.linalg.lstsq(M_eff, f, rcond=None)[0]
         print(f"{np.linalg.norm(Φ):.1e}")
         #calculating f_c
         f_c_closed_loop_const = -Q.T@λ
@@ -277,114 +280,6 @@ class MultiBodySystem:
 
         return state_dot, V_f
 
-    def get_state_dot_driver(self,t,state,V_base,A_base,BG_params):
-        theta_list, beta_list = self.unpack_state(state)
-        n = len(self.links)
-
-        #generalized forces (set to 0 for now, could be used if wanted)
-        #tau_list = [np.zeros(link.joint.nw) for link in self.links]
-        damping = 0.1
-        tau_list = [-damping * beta for beta in beta_list]
-
-        #CALCULATION OF THETA_DOT
-        theta_dot_list = []
-
-        for i in range(len(self.links)):
-            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i]) #CAN CHANGE THIS TO PREALLOCATE FOR SPEED OPTIMIZATION!
-            theta_dot_list.append(theta_dot)
-
-        #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC)
-        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
-
-        #ROTATIONS AND CONSTRAINT SETUPS
-        link1 = self.links[0]
-        linkn = self.links[-1]
-
-        IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
-
-        Q = np.block([np.zeros((3,3)), np.eye(3)])
-
-        #OPERTATIONAL SPACE INERTIA
-        omega_diag, _, _ = self.omega(theta_list,tau_bar,D,n)
-
-        # DRIVER
-        #calculating block entires
-        Λ_nn = IRn @ (omega_diag[n] @ IRn.T)
-
-        Λ_block = Λ_nn
-
-        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
-        
-        l_IOn = positions[n]
-
-        r = 0.2
-        ω = np.pi #angular velocity of the driver
-        center = np.array([0,0,0])
-        bias = 0
-        driver, driver_dot, driver_ddot = self.circle_driver_xz_plane(r, t, ω, center, bias)
-
-        x_on = 1
-        Φ = l_IOn - driver
-        Φ_dot = IRn[:3, :3]@V_f[n][3:] - driver_dot
-        Φ_ddot = IRn[:3, :3]@A_f[n][3:] - driver_ddot
-        
-        #x_on = 1
-        #Φ = l_IOn - np.array([x_on*0.2*np.cos(ω*t), 0, 0.2*np.sin(ω*t)]) #driver is moving in a circle in the xz plane
-        #Φ_dot = IRn[:3, :3]@V_f[n][3:]  - np.array([-x_on*ω*0.2*np.sin(ω*t), 0, ω*0.2*np.cos(ω*t)])
-        #Φ_ddot = IRn[:3, :3]@A_f[n][3:] - np.array([-x_on*ω**2*0.2*np.cos(ω*t), 0, -ω**2*0.2*np.sin(ω*t)])
-
-        # Baumgarte stabilization
-        α, β = BG_params
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β)
-
-        #solving for lagrange multipliers
-        λ = -np.linalg.lstsq((Q @ Λ_block @ Q.T), f, rcond=None)[0]
-
-        #calculating f_c
-        f_c_closed_loop_const = -Q.T @ λ
-        f_c = [np.zeros(6,) for _ in range(n+2)]
-
-        f_c[n] = IRn.T @ f_c_closed_loop_const
-
-
-
-        # HOLDING CONSTRAINT
-        #calculating block entires
-        IR1 = SOA.get_rotation_tip_to_body_I(theta_list, self.links, n)
-        Λ_11 = IR1 @ (link1.RBT.T @ omega_diag[1] @ link1.RBT ) @ IR1.T
-
-        Λ_block_h = Λ_11
-
-        l_IO1 = positions[1]
-        IωIO = SOA.skewfromvec(IR1[:3,:3]@V_f[1][:3])
-
-        Φ_h = (l_IO1 + IR1[:3, :3]@link1.l_hinge) - np.array([0.4, 0, 0])
-        Φ_dot_h = (IR1[:3, :3]@V_f[1][3:] + IωIO@IR1[:3, :3]@link1.l_hinge)
-        Φ_ddot_h = (IR1[:3, :3]@A_f[1][3:] + SOA.skewfromvec(IR1[:3, :3]@A_f[1][:3])@IR1[:3, :3]@link1.l_hinge + IωIO@IωIO@IR1[:3,:3]@link1.l_hinge)
-
-        # Baumgarte stabilization
-        
-        f_h = SOA.baumgarte_stab(Φ_h, Φ_dot_h, Φ_ddot_h, α, β)
-
-        #solving for lagrange multipliers
-        λ_h = -np.linalg.lstsq((Q @ Λ_block_h @ Q.T), f_h, rcond=None)[0]
-
-        #calculating f_c
-        f_c_closed_loop_const_h = -Q.T @ λ_h
-
-        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const_h
-
-        #calculating beta_dot_delta
-        beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
-
-        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
-
-        Φ_norm = np.linalg.norm(Φ)
-        Φ_norm_h = np.linalg.norm(Φ_h)
-        #print(f"Time = {t:.2f}   Driver = {Φ_norm:.2e}    Constraint = {Φ_norm_h:.2e}")
-        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
-
-        return state_dot, V_f
 
     def get_state_dot_sprockets(self,t,state,V_base,A_base,BG_params,Penalty_params):
         theta_list, beta_list = self.unpack_state(state)
@@ -554,13 +449,12 @@ class MultiBodySystem:
         Ω_22 = omega_diag[2]
         Ω_33 = omega_diag[n]
 
-        #calculation og off diagonal terms <--- HVIS DER ER EN FEJL SÅ START HER BED OMEGA UDREGNINGERNE (jeg har debugget de virker lowkey)
-        omega_col_n = self.get_omega_ij_col(n, theta_list, tau_bar, omega_diag,n)
-        omega_col_2 = self.get_omega_ij_col(2, theta_list, tau_bar, omega_diag,n)
+       
 
-        Ω_21 = omega_col_2[1]
-        Ω_31 = omega_col_n[1]
-        Ω_32 = omega_col_n[2]
+        Ω_21 = self.get_omega_ij(2,1,theta_list,tau_bar,omega_diag,n)
+        Ω_31 = self.get_omega_ij(3,1,theta_list,tau_bar,omega_diag,n)
+        Ω_32 = self.get_omega_ij(3,2,theta_list,tau_bar,omega_diag,n)
+
 
         #time to build lambda matrix. Block entires are calculated
         #constraint 1 - closed loop
@@ -646,6 +540,8 @@ class MultiBodySystem:
         tau[0]     = np.zeros_like(tau[1])
         tau[n+1]   = np.zeros_like(tau[n])
 
+        self.l_from_origin = links[n].joint.get_translation(theta[n]) #returns [0,0,0] for anything other than FreeJoint()
+
         P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic,pRc_cache = \
             [([None]*(n+2)) for _ in range(12)] 
             
@@ -658,14 +554,19 @@ class MultiBodySystem:
     
         # --- ATBI scatter ---- 
         for k in range(n, 0, -1):
+            if k == n:
+                RBT = SOA.RBT(self.l_from_origin)
+            else:
+                RBT = links[k+1].RBT
+
             pRc = links[k].joint.get_spatial_rotation(theta[k]) 
             pRc_cache[k] = pRc
             cRp = pRc.T 
 
-            delta_V = links[k].joint.H.T @ beta[k]
-            V[k] = cRp @ links[k].RBT.T @ V[k+1] + delta_V
+            delta_V_k = links[k].joint.H.T @ beta[k]
+            V[k] = cRp @ RBT.T @ V[k+1] + delta_V_k #k+1 as we need phi(k+1,k)
 
-            agothic[k] = SOA.spatialskewtilde(V[k]) @ links[k].joint.H.T @ beta[k]
+            agothic[k] = SOA.spatialskewtilde(V[k]) @ delta_V_k - SOA.spatialskewbar(delta_V_k)@delta_V_k
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
 
         # --- ATBI GATHER ---
@@ -690,10 +591,15 @@ class MultiBodySystem:
 
         # --- 4. ATBI SCATTER ---
         for k in range(n, 0, -1):
+            if k == n: #boundary condition on n. This is to model free joint if needed.
+                RBT = SOA.RBT(self.l_from_origin )
+            else:
+                RBT = links[k+1].RBT
+
             pRc = pRc_cache[k]
             cRp = pRc.T 
 
-            A_plus = cRp @ links[k].RBT.T @ A[k+1]
+            A_plus = cRp @ RBT.T @ A[k+1]
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
         return beta_dot[1:n+1], V, A, tau_bar, D, G
@@ -719,6 +625,7 @@ class MultiBodySystem:
         beta[n+1]  = np.zeros_like(beta[n])
         tau[0]     = np.zeros_like(tau[1])
         tau[n+1]   = np.zeros_like(tau[n])
+
 
         P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic,pRc_cache = \
             [([None]*(n+2)) for _ in range(12)] 
@@ -916,25 +823,30 @@ class MultiBodySystem:
         gamma = [None]*(n+2)
         omega = [None]*(n+2)
         theta = [None]*(n+2)
+        links = [None]*(n+2) 
 
-        #theta_list is on a 0-index basis, for convenience i shift this. This is not effective in time, but for now is ok
 
         for i in range(1,n+1):
             theta[i] = theta_list[i-1]
+            links[i] = self.links[i-1]
 
         #boundary condition on omega
         gamma[n+1] = np.zeros((6,6))
 
         for k in range (n,0,-1):
-            link_k = self.links[k-1] #remember, links is on a 0-index
+
+            if k == n: #boundary condition on n. This is to model free joint if needed.
+                RBT = SOA.RBT(self.l_from_origin )
+            else:
+                RBT = links[k+1].RBT
 
             #rotations
-            pRc = link_k.joint.get_spatial_rotation(theta[k])
+            pRc = links[k].joint.get_spatial_rotation(theta[k])
             cRp = pRc.T
 
             #calculating diagonal entries of omega
 
-            gamma[k] = tau_bar[k].T @ cRp @ link_k.RBT.T @ gamma[k+1] @ link_k.RBT @ pRc @ tau_bar[k] + link_k.joint.H.T @ np.linalg.solve(D[k],link_k.joint.H)
+            gamma[k] = tau_bar[k].T @ cRp @ RBT.T @ gamma[k+1] @ RBT @ pRc @ tau_bar[k] + links[k].joint.H.T @ np.linalg.solve(D[k],links[k].joint.H)
 
         #renaminmg for readability
         omega_diag = gamma
@@ -952,19 +864,23 @@ class MultiBodySystem:
             return self.get_omega_ij(j, i, theta_list, tau_bar, omega_diag,n).T
             
         current_omega = omega_diag[i]
-        
-        # Shift theta to 1-based indexing for convenience
-        theta = [None]*(len(self.links)+2)
+        theta = [None]*(n+2)
+        links = [None]*(n+2) 
 
         for idx in range(1,n+1):
             theta[idx] = theta_list[idx-1]
+            links[idx] = self.links[idx-1]
             
         # Propagate from body i-1 down to j
         for k in range(i-1, j-1, -1):
-            link_k = self.links[k-1]
-            pRc = link_k.joint.get_spatial_rotation(theta[k])
+            pRc = links[k].joint.get_spatial_rotation(theta[k])
             cRp = pRc.T
-            current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
+            if k == n: #boundary condition on n. This is to model free joint if needed.
+                RBT = SOA.RBT(self.l_from_origin )
+            else:
+                RBT = links[k+1].RBT
+
+            current_omega = cRp @ current_omega @ RBT @ pRc @ tau_bar[k]
         #det den roterer lever i frame j    
         return current_omega
 
@@ -973,6 +889,7 @@ class MultiBodySystem:
             #this is not a scaling issue for the closed loop, as it is only a single constraints. For efficient modelling of more than one constraint, maybe one should reconsider recoding this.
             #It is however, more efficient than the default get_omega_ij, as it has better scaling.
             #it returns a list thats indexed [omega(i,1), omega(i,2)...
+            #det den roterer lever i frame j 
                 
 
             #IMPORTANT! IT ONLY PROPAGATES DOWNWARDS, SO YOU NEED TO HAVE i>j always.   
@@ -996,9 +913,10 @@ class MultiBodySystem:
                 # Propagate one step down
                 current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
             
-                # Save the result, because this IS Omega_{i, k}
+                # Save the result, because this IS Omega_{i, k}. It should live in frame k
                 omega_col[k] = current_omega
             return omega_col
+    
     def beta_dot_delta(self,theta_list,tau_bar,D,f_c,G,n):
         #shifting indexing for convience (same method as in run_ATBI)
         n = len(self.links) #no of bodies
@@ -1036,13 +954,17 @@ class MultiBodySystem:
 
         #scatter pass
         for k in range(n,0,-1):
+            if k == n: #boundary condition on n. This is to model free joint if needed.
+                RBT = SOA.RBT(self.l_from_origin )
+            else:
+                RBT = links[k+1].RBT
             #rotations
             pRc = links[k].joint.get_spatial_rotation(theta[k])
             cRp = pRc.T
             
-            lambda_list[k] = tau_bar[k].T @ cRp @ links[k].RBT.T @ lambda_list[k+1]+links[k].joint.H.T@nu[k]
+            lambda_list[k] = tau_bar[k].T @ cRp @ RBT.T @ lambda_list[k+1]+links[k].joint.H.T@nu[k]
 
-            beta_dot_delta[k] = nu[k] - G[k].T@cRp@links[k].RBT.T@lambda_list[k+1]
+            beta_dot_delta[k] = nu[k] - G[k].T@cRp@RBT.T@lambda_list[k+1]
         
         return beta_dot_delta[1:n+1] #returning on 0 based indexing so it mathes
 

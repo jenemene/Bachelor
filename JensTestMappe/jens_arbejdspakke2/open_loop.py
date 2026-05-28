@@ -8,22 +8,26 @@ import time
 robot = ob.MultiBodySystem()
 
 #defining joints
-
+joint_n_free = ob.FreeJoint()
 joint3 = ob.SphericalJoint()
 joint2 = ob.SphericalJoint()
 joint1 = ob.SphericalJoint()
 
 
 #intialziing such that pendulum is hanging to the right
+joint_n_free.q_init = np.hstack([SOA.quatfromrev((0)*np.pi, "y"),np.array([0,0,0])])
+
 
 joint3.q_init = SOA.quatfromrev((3/4)*np.pi, "y")
 #defining link
+link_n_free = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint_n_free)
 link3 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint3)
 link2 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint2)
-link1 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, np.sqrt(0.02)]), joint=joint1)
+link1 = ob.Link(mass=1.0, l_hinge=np.array([0, 0, 1]), joint=joint1)
 
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
+robot.add_link(link_n_free)
 robot.add_link(link3)
 robot.add_link(link2)
 robot.add_link(link2)

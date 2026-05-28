@@ -1288,7 +1288,7 @@ class MultiBodySystem:
             pRc = link_k.joint.get_spatial_rotation(theta[k])
             cRp = pRc.T
             current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
-        #det den roterer lever i frame j    
+        #det den retunerer lever i frame j    
         return current_omega
   
     def beta_dot_delta(self,theta_list,tau_bar,D,f_c,G,n):
