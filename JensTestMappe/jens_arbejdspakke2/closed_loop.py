@@ -16,13 +16,22 @@ joint1 = ob.SphericalJoint()
 
 
 #intialziing such that pendulum is hanging to the right
+joint3 = ob.FreeJoint()
+joint3.q_init = np.hstack([SOA.quatfromrev(0.5*np.pi, "y"),np.array([0.0,0,0])]) 
+
 
 joint3_fixed.q_init = SOA.quatfromrev(0.5*np.pi, "y")
 joint2.q_init = SOA.quatfromrev(2*np.pi/3, "y")
 joint1.q_init = SOA.quatfromrev(2*np.pi/3, "y")
 
+joint3_fixed.w_init = np.array([0,0,0])
+joint3.w_init = np.array([0,0,0,0,0,0])
+joint2.w_init = np.array([0,0,0])
+joint1.w_init = np.array([0,0,0])
+
 #defining link
 mass = 2
+link3 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
 link3_fixed= ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint3_fixed)
 link2 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint2)
 link1 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
@@ -45,15 +54,16 @@ A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 
 robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0.1,500])
 
-# robot.calc_TE_delta()
+robot.calc_TE_error()
+
+robot.plot_gen_velocities()
 
 path = "JensTestMappe/jens_arbejdspakke2/results"
-file_name = "constraintviolation_BG=0.1_500"
-robot.CSV_creator(path, file_name, "tspan", "constraint_violation")
-
+file_name = "energy_free_hinge"
+robot.CSV_creator(path, file_name, "tspan", "TE_error")
 
 plt.plot(tspan,robot.constraint_violation)
 plt.grid()
 plt.show()
 
-#robot.animation(config="closed",step=5)
+robot.animation(config="closed",step=5)

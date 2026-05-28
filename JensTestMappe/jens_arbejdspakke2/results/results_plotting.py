@@ -360,6 +360,32 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
     plt.show()
 
 
+def plot_TE_error(filename):
+    # Resolve the absolute path relative to this script's location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, filename)
+
+    # Load the CSV data (assuming order: tspan, PE, KE, TE)
+    data = np.loadtxt(file_path, delimiter=',')
+    tspan, TE_error = data[:, 0], data[:, 1]
+
+    plt.figure(figsize=(10, 6))
+
+    plt.plot(tspan, TE_error, color='black')
+
+    # Formatting
+    plt.xlabel("Time [s]", fontsize=14)
+    plt.ylabel(r"Relative Total Energy [J]", fontsize=14)
+    plt.grid(True, alpha=0.5)
+
+    # Force scientific notation for the y-axis
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+    ax.tick_params(axis='both', which='major', labelsize=12)
+
+    plt.show()
 # 1. List the CSV files you want to compare
 violation_files = [
     "constraintviolation_BG=10_50.csv","constraintviolation_BG=100_100.csv","constraintviolation_BG=0.1_500.csv","constraintviolation_BG=50_500.csv"
@@ -371,4 +397,4 @@ bg_sets = [
 ]
 
 # 3. Call the plotting function
-plot_constraint_violation(violation_files, bg_sets)
+plot_TE_error("energy_free_hinge_open.csv")
