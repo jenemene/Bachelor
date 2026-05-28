@@ -183,110 +183,6 @@ class MultiBodySystem:
         theta_dot_list = []
 
         for i in range(len(self.links)):
-            theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i]) 
-            theta_dot_list.append(theta_dot)
-
-        #UNCONSTRAINED FORWARD DYNAMICS (FREE VEL AND ACC)
-        beta_dot_f_list, V_f, A_f, tau_bar, D, G = self.run_ATBI(theta_list,beta_list,tau_list,V_base,A_base)
-
-        #ROTATIONS AND CONSTRAINT SETUPS
-        link1 = self.links[0]
-        linkn = self.links[-1]
-
-        IR1 = SOA.get_rotation_tip_to_body_I(theta_list,self.links,n)
-        IRn = linkn.joint.get_spatial_rotation(theta_list[-1])
-
-        d = np.block([np.zeros((3,3)), np.eye(3)])
-        Q = np.block([d, -d])
-
-        omega_diag = self.get_omega_diag(theta_list,tau_bar,D,n)
-        omega_nn = omega_diag[n]
-        omega_11 = omega_diag[1]
-        
-        # NOTE: Hardcoded to 'n' instead of the leaked 'i' loop variable
-        omega_n1 = self.get_omega_ij(n,1,theta_list,tau_bar,omega_diag,n) 
-
-        Λ_11 = IR1 @ (link1.RBT.T @ omega_11 @ link1.RBT) @IR1.T
-        Λ_nn = IRn @ (omega_nn @ IRn.T)
-        Λ_n1 = IR1 @ (omega_n1 @ link1.RBT) @ IR1.T
-
-        Λ_block = np.block([
-            [Λ_11, Λ_n1.T],
-            [Λ_n1, Λ_nn]
-        ])
-
-        V_tip = IR1@link1.RBT.T@V_f[1]
-        v_tip  = V_tip[3:]
-        v_base = IRn[:3, :3]@V_f[n][3:]
-
-        positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
-        l_IO1 = positions[1]
-        l_IOn = positions[n]
-
-        # --- 1. PROPER INERTIAL ACCELERATIONS (The Missing w x v Terms) ---
-        # a_inertial = R * (v_dot + w x v)
-        
-        # Base Origin Acceleration
-        v_dot_base = A_f[n][3:]
-        w_x_v_base = SOA.skewfromvec(V_f[n][:3]) @ V_f[n][3:]
-        a_base_inertial = IRn[:3, :3] @ (v_dot_base + w_x_v_base)
-        
-        # Tip Link Origin Acceleration
-        v_dot_tip_origin = A_f[1][3:]
-        w_x_v_tip_origin = SOA.skewfromvec(V_f[1][:3]) @ V_f[1][3:]
-        a_tip_origin_inertial = IR1[:3, :3] @ (v_dot_tip_origin + w_x_v_tip_origin)
-        
-        # --- 2. KINEMATIC PROJECTION TO THE HINGE ---
-        # a_hinge = a_origin + w_dot x r + w x (w x r)
-        w_dot_1_inertial = IR1[:3, :3] @ A_f[1][:3]
-        IωIO = SOA.skewfromvec(IR1[:3,:3] @ V_f[1][:3])
-        r_hinge_1_inertial = IR1[:3, :3] @ link1.l_hinge
-        
-        a_tip_hinge_inertial = a_tip_origin_inertial + SOA.skewfromvec(w_dot_1_inertial) @ r_hinge_1_inertial + IωIO @ IωIO @ r_hinge_1_inertial
-
-        # --- 3. THE FINAL CONSTRAINT EQUATIONS ---
-        Φ = -(l_IOn - (l_IO1 + r_hinge_1_inertial))
-        Φ_dot = v_tip - v_base
-        Φ_ddot = -(a_base_inertial - a_tip_hinge_inertial)
-
-        # --- 4. BAUMGARTE & SOLVER ---
-        α, β = BG_params
-        f = SOA.baumgarte_stab(Φ, Φ_dot, Φ_ddot, α, β)
-        
-        M_eff = Q @ Λ_block @ Q.T
-        λ = -np.linalg.lstsq(M_eff, f, rcond=None)[0]
-
-        #calculating f_c
-        f_c_closed_loop_const = -Q.T@λ
-        f_c = [np.zeros(6,) for _ in range(n+2)]
-
-        #constraints and Q are ordered [tip, base]
-        f_c[1] = link1.RBT @ IR1.T @ f_c_closed_loop_const[:6] 
-        f_c[n] = IRn.T @ f_c_closed_loop_const[6:]
-
-        #calculating beta_dot_delta
-        beta_dot_delta_list = self.beta_dot_delta(theta_list,tau_bar,D,f_c,G,n)
-
-        beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
-
-        state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
-
-        if self._record_metrics == True:
-            self.constraint_violation.append(np.linalg.norm(Φ))
-
-        return state_dot, V_f
-
-    def get_state_dot_closed_old(self,t,state,V_base,A_base,BG_params):
-        theta_list, beta_list = self.unpack_state(state)
-        n = len(self.links)
-
-        #generalized forces (set to 0 for now, could be used if wanted)
-        tau_list = [np.zeros(link.joint.nw) for link in self.links]
-
-        #CALCULATION OF THETA_DOT
-        theta_dot_list = []
-
-        for i in range(len(self.links)):
             theta_dot = self.links[i].joint.get_derrivative(theta_list[i],beta_list[i]) #CAN CHANGE THIS TO PREALLOCATE FOR SPEED OPTIMIZATION!
             theta_dot_list.append(theta_dot)
 
@@ -382,7 +278,6 @@ class MultiBodySystem:
 
 
         return state_dot, V_f
-
 
     def get_state_dot_sprockets(self,t,state,V_base,A_base,BG_params,Penalty_params):
         theta_list, beta_list = self.unpack_state(state)
@@ -658,7 +553,7 @@ class MultiBodySystem:
         # --- ATBI scatter ---- 
         for k in range(n, 0, -1):
             if k == n:
-                RBT = SOA.RBT(self.l_from_origin)
+                RBT = SOA.RBT(self.l_from_origin) #k+1 as we need phi(k+1,k)
             else:
                 RBT = links[k+1].RBT
 
@@ -667,7 +562,7 @@ class MultiBodySystem:
             cRp = pRc.T 
 
             delta_V_k = links[k].joint.H.T @ beta[k]
-            V[k] = cRp @ RBT.T @ V[k+1] + delta_V_k #k+1 as we need phi(k+1,k)
+            V[k] = cRp @ RBT.T @ V[k+1] + delta_V_k 
 
             agothic[k] = SOA.spatialskewtilde(V[k]) @ delta_V_k - SOA.spatialskewbar(delta_V_k)@delta_V_k
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
@@ -1013,18 +908,24 @@ class MultiBodySystem:
             omega_col[i] = current_omega
             
             # Shift theta to 1-based indexing for convenience
-            theta = [None]*(len(self.links)+2)
+            theta = [None]*(n+2)
+            links = [None]*(n+2)
 
             for idx in range(1,n+1):
                 theta[idx] = theta_list[idx-1]
+                links[idx] = self.links[idx-1]
                 
             for k in range(i - 1, 0, -1):
-                link_k = self.links[k-1]
-                pRc = link_k.joint.get_spatial_rotation(theta[k])
+                if k == n: #boundary condition on n. This is to model free joint if needed.
+                    RBT = SOA.RBT(self.l_from_origin)
+                else:
+                    RBT = links[k+1].RBT
+
+                pRc = links[k].joint.get_spatial_rotation(theta[k])
                 cRp = pRc.T
   
                 # Propagate one step down
-                current_omega = cRp @ current_omega @ link_k.RBT @ pRc @ tau_bar[k]
+                current_omega = cRp @ current_omega @ RBT @ pRc @ tau_bar[k]
             
                 # Save the result, because this IS Omega_{i, k}. It should live in frame k
                 omega_col[k] = current_omega

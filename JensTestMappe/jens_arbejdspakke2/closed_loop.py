@@ -24,9 +24,10 @@ joint3_fixed.q_init = SOA.quatfromrev(0.5*np.pi, "y")
 joint2.q_init = SOA.quatfromrev(2*np.pi/3, "y")
 joint1.q_init = SOA.quatfromrev(2*np.pi/3, "y")
 
-joint3_fixed.w_init = np.array([0,5,0,0,0,0])
-joint2.w_init = np.array([0,5,0])
-joint1.w_init = np.array([0,5,0])
+joint3_fixed.w_init = np.array([0,0,0])
+joint3.w_init = np.array([0,0,0,0,0,0])
+joint2.w_init = np.array([0,0,0])
+joint1.w_init = np.array([0,0,0])
 
 #defining link
 mass = 2
@@ -37,7 +38,7 @@ link1 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
 
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
-robot.add_link(link3)
+robot.add_link(link3_fixed)
 robot.add_link(link2)
 robot.add_link(link1)
 

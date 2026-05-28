@@ -397,4 +397,4 @@ bg_sets = [
 ]
 
 # 3. Call the plotting function
-plot_TE_error("energy_free_hinge.csv")
+plot_TE_error("energy_free_hinge_open.csv")
