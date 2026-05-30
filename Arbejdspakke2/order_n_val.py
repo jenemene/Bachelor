@@ -14,9 +14,9 @@ A_base = np.zeros(6)
 A_base[-1] = 9.81  # Simulating gravity in z
 
 # Setup for validation
-n_start = 5
-n_end = 100
-step_length = 5
+n_start = 1
+n_end = 20
+step_length = 1
 repeats = 10
 
 n_bodies_list = [1] + list(range(n_start, n_end+1, step_length))
@@ -53,8 +53,8 @@ with open(csv_filename, mode='w', newline='') as file:
             pend.simulate_own_RK4(tspan, V_base, A_base, "open")
             end_rk4 = time.perf_counter()
             t_rk4 = end_rk4 - start_rk4
-            pend.calc_TE_delta()
-            TE_delta_rk4 = pend.return_TE_delta_mean()
+            pend.calc_TE_error()
+            TE_delta_rk4 = pend.return_TE_error_mean()
             
             # Benchmark solve_ivp RK45 solver
             start_rk45 = time.perf_counter()
