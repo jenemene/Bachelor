@@ -15,7 +15,6 @@ joint1 = ob.SphericalJoint()
 
 
 #intialziing such that pendulum is hanging to the right
-
 joint3_fixed.q_init = SOA.quatfromrev(0.5*np.pi, "y")
 joint2.q_init = SOA.quatfromrev(2*np.pi/3, "y")
 joint1.q_init = SOA.quatfromrev(2*np.pi/3, "y")
@@ -27,8 +26,10 @@ link1 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
 
 #if free joint is wanted
 joint3 = ob.FreeJoint()
-link3 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
+joint3.q_init = np.hstack([SOA.quatfromrev(0.5*np.pi, "y"),np.array([0,0,0])])
+joint3.w_init = np.array([0,1,0,0,0,0])
 
+link3 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
 robot.add_link(link3)
@@ -44,19 +45,17 @@ V_base = np.zeros(6)
 A_base = np.zeros(6)
 A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 
-# robot.plot_initial_state("closed")
-
-robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0.1,500])
-
+robot.plot_initial_state("closed")
+robot.simulate(tspan,V_base,A_base,"closed",BG_params=[200,500])
 robot.calc_TE_error()
+robot.plot_attribute("TE_error")
+robot.plot_gen_velocities(savefig=False)
+robot.animation(config="closed",step=5)
 
-path = "Arbejdspakke2/results"
-file_name = "3_closed_TE_error_BG_01_500"
-robot.CSV_creator(path, file_name, "tspan", "TE_error")
+# path = "Arbejdspakke2/results"
+# file_name = "3_closed_TE_error_BG_01_500"
+# robot.CSV_creator(path, file_name, "tspan", "TE_error")
 
 # file_name = "3_closed_gen_acc_t100"
 # robot.CSV_creator(path, file_name, "tspan", "beta_dot")
 
-# robot.plot_gen_velocities(savefig=False)
-
-# robot.animation(config="closed",step=5)

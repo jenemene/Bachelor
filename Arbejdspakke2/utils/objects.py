@@ -78,7 +78,8 @@ class FreeJoint(Joint):
     def get_derrivative(self,theta,beta):
         theta_rot_dot = SOA.derrivmap(theta[:4],beta[:3],"spherical")
         rot = SOA.rotfromquat(theta[:4])
-        theta_trans_dot = rot@beta[3:] 
+        theta_trans_dot = rot @ beta[3:]
+        # dIl(I,n)/dt = Iv(I,n) = IRn nv(I,n). beta comes from integration of beta_dot, which is in body frame
         return np.concatenate([theta_rot_dot, theta_trans_dot])
     
     def get_spatial_rotation(self,theta):
@@ -118,6 +119,9 @@ class MultiBodySystem:
         self.total_nw = 0
         self.result = None
         self.tspan = None
+        self.constraint_violation = []
+        self._record_metrics = False
+        self.l_from_origin = np.array([0,0,0])
 
     def add_link(self,link):
         self.links.insert(0, link)
@@ -254,7 +258,9 @@ class MultiBodySystem:
         #λ = -np.linalg.solve((Q@Λ_block@Q.T),f)
         
         λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
-        print(f"{np.linalg.norm(Φ):.1e}")
+        
+        print(f"t={t:.2f}   |Φ|={np.linalg.norm(Φ):.2e}")
+
         #calculating f_c
         f_c_closed_loop_const = -Q.T@λ
         f_c = [np.zeros(6,) for _ in range(n+2)]
@@ -490,9 +496,10 @@ class MultiBodySystem:
 
         α, β = BG_params
         Φ_BG = SOA.baumgarte_stab(Φ_system, Φ_dot_system, Φ_ddot_system, α, β)
+
         print(f"t={t:.2f}   |Φ|={np.linalg.norm(Φ_system):.2e}")
-        #solving for lagrange multipliers
         
+        #solving for lagrange multipliers
         M_eff = Q_sys @ Λ_sys @ Q_sys.T
         λ = -np.linalg.solve(M_eff, Φ_BG)
     
@@ -656,6 +663,8 @@ class MultiBodySystem:
         tau[0]     = np.zeros_like(tau[1])
         tau[n+1]   = np.zeros_like(tau[n])
 
+        self.l_from_origin = links[n].joint.get_translation(theta[n]) #returns [0,0,0] for anything other than FreeJoint()
+
         P_plus, xi_plus, nu, A, V, G, D, beta_dot, tau_bar, agothic, bgothic,pRc_cache = \
             [([None]*(n+2)) for _ in range(12)] 
             
@@ -668,14 +677,21 @@ class MultiBodySystem:
     
         # --- ATBI scatter ---- 
         for k in range(n, 0, -1):
+            if k == n:
+                RBT = SOA.RBT(self.l_from_origin) #l(k+1,k) as we need phi(k+1,k)
+            else:
+                RBT = links[k+1].RBT
+
             pRc = links[k].joint.get_spatial_rotation(theta[k]) 
             pRc_cache[k] = pRc
             cRp = pRc.T 
 
             delta_V_k = links[k].joint.H.T @ beta[k]
-            V[k] = cRp @ links[k].RBT.T @ V[k+1] + delta_V_k
+            V[k] = cRp @ RBT.T @ V[k+1] + delta_V_k 
 
-            agothic[k] = SOA.spatialskewtilde(V[k]) @ links[k].joint.H.T @ beta[k]
+            agothic[k] = SOA.spatialskewtilde(V[k]) @ delta_V_k #- SOA.spatialskewbar(delta_V_k)@delta_V_k
+            #latter part commented out after talks with Jain
+
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
 
         # --- ATBI GATHER ---
@@ -700,10 +716,15 @@ class MultiBodySystem:
 
         # --- 4. ATBI SCATTER ---
         for k in range(n, 0, -1):
+            if k == n: #boundary condition on n. This is to model free joint if needed.
+                RBT = SOA.RBT(self.l_from_origin )
+            else:
+                RBT = links[k+1].RBT
+
             pRc = pRc_cache[k]
             cRp = pRc.T 
 
-            A_plus = cRp @ links[k].RBT.T @ A[k+1]
+            A_plus = cRp @ RBT.T @ A[k+1]
             beta_dot[k] = nu[k] - G[k].T @ A_plus
             A[k] = A_plus + links[k].joint.H.T @ beta_dot[k] + agothic[k]
         return beta_dot[1:n+1], V, A, tau_bar, D, G
@@ -890,7 +911,9 @@ class MultiBodySystem:
             t = tspan[i]
             y = Y[:, i]
 
-            k1, V_val  = ODEfun(t, y, V_base, A_base)
+            self._record_metrics = True
+            k1, V_val = ODEfun(t, y, V_base, A_base)
+            self._record_metrics = False
             self.V[i] = V_val
             self.beta_dot[i] = k1[self.total_nq:]
 
@@ -1358,8 +1381,8 @@ class MultiBodySystem:
         ncols = 3
         nrows = int(np.ceil(num_snapshots / ncols))
         
-        # Adjusted figure size to fit a tight 2x3 horizontal grid seamlessly
-        fig = plt.figure(figsize=(11, 7.5))
+        # Adjusted figure size to 12x8 to perfectly match a 3:2 grid ratio
+        fig = plt.figure(figsize=(12, 8))
 
         def compute_positions(state_k):
             theta_list, _ = self.unpack_state(state_k)
@@ -1380,13 +1403,12 @@ class MultiBodySystem:
         mid_x = (max(all_x) + min(all_x)) / 2
         mid_z = (max(all_z) + min(all_z)) / 2
         
-        # Tightened padding margin from 0.55 down to 0.51 to pull the borders closer to the motion limits
-        padding = max_range * 0.51  
+        # FIX 1: Increased padding from 0.51 to 0.65 to give the figures more breathing room
+        padding = max_range * 0.65  
         xlims = [mid_x - padding, mid_x + padding]
         zlims = [mid_z - padding, mid_z + padding]
 
-        # --- FIX: HARDCODED PERFECT DRIVER CIRCLE ---
-        # Centered exactly at (0,0) with a physical radius of 0.2 as specified
+        # --- HARDCODED PERFECT DRIVER CIRCLE ---
         driver_center_x = 0.0
         driver_center_z = 0.0
         driver_radius = 0.2
@@ -1449,13 +1471,12 @@ class MultiBodySystem:
             ax.plot([0, 0], [0, 0], zlims, color='#444444', linestyle='--', alpha=0.25, lw=0.8, zorder=1)
 
             # --- TITLE ---
-            # Positioned tightly near the top edge of the black boundary line
-            ax.set_title(f"t = {self.tspan[frame_idx]:.2f} s", fontsize=11, y=0.94, weight='bold', color='#222222')
+            ax.set_title(f"t = {self.tspan[frame_idx]:.2f} s", fontsize=11, y=0.88, weight='bold', color='#222222')
                 
-        # --- FIX: AGGRESSIVE SPACE COMPRESSION ---
-        # subplots_adjust forces the subplots to stretch closer to each other, cutting out the dead margins.
-        # wspace and hspace control the horizontal and vertical gap sizes directly.
-        plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.92, wspace=0.05, hspace=0.15)
+        # --- FIX 2: NEGATIVE SPACING COMPRESSION ---
+        # 3D axes in Matplotlib have massive invisible margins. 
+        # Using negative wspace and hspace overrides this padding to pull the squares together.
+        plt.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.94, wspace=-0.25, hspace=-0.15)
         plt.show()
 
     def plot_initial_state(self, config="openclosed"):
@@ -1639,7 +1660,7 @@ class MultiBodySystem:
 
             self.TE_error[i] = KE_rel_t + PE_rel_t
 
-        # print("TE_error calculated!")
+        print("TE_error calculated!")
 
     def return_TE_error_mean(self):
         if self.TE_error is None:
@@ -1800,5 +1821,13 @@ class MultiBodySystem:
         plt.figure()
         plt.plot(self.tspan, y_data)
         plt.xlabel("Time [s]")
+
+        # --- SCIENTIFIC NOTATION FORMATTING --- 
+        # This triggers scientific notation for numbers smaller than 10^(-2) or larger than 10^3
+        formatter = ScalarFormatter(useMathText=True)
+        formatter.set_powerlimits((-2, 3))
+        ax = plt.gca()
+        ax.yaxis.set_major_formatter(formatter)
+        
         plt.show()
         

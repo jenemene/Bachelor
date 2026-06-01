@@ -403,11 +403,13 @@ filename2 = "3_closed_TE_error_half.csv"
 
 # plot_TE_error("3_closed_TE_error_t100.csv")
 
-compare_TE_error("3_closed_TE_error_BG_10_50.csv","3_closed_TE_error_BG_100_100.csv","3_closed_TE_error_BG_01_500.csv","3_closed_TE_error_BG_50_500.csv")
+# compare_TE_error("3_closed_TE_error_BG_10_50.csv","3_closed_TE_error_BG_100_100.csv","3_closed_TE_error_BG_01_500.csv","3_closed_TE_error_BG_50_500.csv")
 
-adams_path = r"C:\Users\kaspe\OneDrive - Aarhus universitet\6. semester\Bachelorprojekt\Adams\closed_3_body_adams_results.csv"
-filename3 = "3_closed_gen_acc.csv"
+# adams_path = r"C:\Users\kaspe\OneDrive - Aarhus universitet\6. semester\Bachelorprojekt\Adams\closed_3_body_adams_results.csv"
+# filename3 = "3_closed_gen_acc.csv"
 
 # adams_comp(filename3, adams_path, plot_diff=True, savefig=True)
 
 # adams_comp_error_only(filename3, adams_path, savefig=True)
+
+plot_all_energies("5p_energies.csv")
