@@ -619,4 +619,3 @@ class SimpleLink:
             self.H =np.block([[np.eye(3), np.zeros((3,3))]])
         else:
             print("right now i have only specified for spherical joints")
-

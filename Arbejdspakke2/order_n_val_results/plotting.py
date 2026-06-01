@@ -103,7 +103,7 @@ def plot_TE_delta(csv_filename):
     plt.tight_layout()
     plt.show()
 
-csv_filename = "Arbejdspakke2/order_n_val_results/solver_benchmark_results.csv"
+csv_filename = "Arbejdspakke2/order_n_val_results/solver_benchmark_results/1_to_20_interval_1.csv"
 
 statistical_plot(csv_filename)
 
