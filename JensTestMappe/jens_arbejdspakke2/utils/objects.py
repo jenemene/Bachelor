@@ -65,6 +65,24 @@ class RevoluteJoint(Joint):
     def get_translation(self,theta):
         return np.zeros(3,)
 
+class TranslationalJoint(Joint):
+    def __init__(self):
+        super().__init__()
+        self.nq = 3 # x, y, z translation
+        self.nw = 3 # v_x, v_y, v_z velocities
+        self.H = np.block([[np.zeros((3,3)), np.eye(3)]])
+        self.q_init = np.zeros(3)
+        self.w_init = np.zeros(3)
+
+    def get_derrivative(self,theta,beta):
+        return beta
+        
+    def get_spatial_rotation(self,theta):
+        return np.eye(6)
+    
+    def get_translation(self,theta):
+        return theta
+
 class FreeJoint(Joint):
     def __init__(self):
         super().__init__()
@@ -809,6 +827,14 @@ class MultiBodySystem:
 
             Y[:, i+1] = y + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
 
+            # Normalize quaternions directly in the state vector to prevent RK4 drift
+            idx_q = 0
+            for link in self.links:
+                if link.joint.nq == 4 or link.joint.nq == 7:
+                    q = Y[idx_q : idx_q+4, i+1]
+                    Y[idx_q : idx_q+4, i+1] = q / np.linalg.norm(q)
+                idx_q += link.joint.nq
+
             # Robust way to print every 1 second of simulation time
             if t % 1 < dt: 
                 print(f"t = {t:.2f} s")
@@ -1028,12 +1054,21 @@ class MultiBodySystem:
                 ax_right.legend(loc='upper right', fontsize='small')
 
             # --- 3-DOF SPHERICAL JOINT ---
-            elif nw == 3: 
+            elif nw == 3 and link.joint.nq == 4: 
                 ax_left.plot(tspan, beta_k[0, :], color=colors[0], label=r'$\omega_x$')
                 ax_left.plot(tspan, beta_k[1, :], color=colors[1], label=r'$\omega_y$')
                 ax_left.plot(tspan, beta_k[2, :], color=colors[2], label=r'$\omega_z$')
                 
                 ax_left.set_ylabel(f'Body {k+1}\n[rad/s]')
+                ax_left.legend(loc='upper right', fontsize='small')
+
+            # --- 3-DOF TRANSLATIONAL JOINT ---
+            elif nw == 3 and link.joint.nq == 3: 
+                ax_left.plot(tspan, beta_k[0, :], color=colors[0], linestyle='--', label=r'$v_x$')
+                ax_left.plot(tspan, beta_k[1, :], color=colors[1], linestyle='--', label=r'$v_y$')
+                ax_left.plot(tspan, beta_k[2, :], color=colors[2], linestyle='--', label=r'$v_z$')
+                
+                ax_left.set_ylabel(f'Body {k+1}\n[m/s]')
                 ax_left.legend(loc='upper right', fontsize='small')
 
             # --- 1-DOF REVOLUTE JOINT ---
@@ -1199,7 +1234,7 @@ class MultiBodySystem:
         self.PE = np.zeros(nt)
         self.TE = np.zeros(nt)
         
-        g = 9.81
+        g = 0*9.81
         
         for i in range(nt):
             # Initalization for each timestep
@@ -1423,7 +1458,7 @@ class MultiBodySystem:
             pRc = self.links[i-1].joint.get_spatial_rotation(theta_list[i-1]) # bc self.links and theta_list starts from 0
             pRc = pRc[:3,:3]
 
-            positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge # self.links start from 0...
+            positions[i] = positions[i+1] + R_cumulative @ self.links[i].l_hinge
             
             R_cumulative = R_cumulative @ pRc
 
