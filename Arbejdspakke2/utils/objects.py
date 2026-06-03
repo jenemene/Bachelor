@@ -1102,9 +1102,10 @@ class MultiBodySystem:
         
         # Shift theta to 1-based indexing for convenience
         theta = [None]*(len(self.links)+2)
-
+        #this 1 based indexing shift becomes a scaling issue if the function is called more than one time. If called for all off diagonal entries, it actually multiplies the complexity by O(n). 
+        #as this is not the case, there is no need to optimize, because this is readable as is.
         for idx in range(1,n+1):
-            theta[idx] = theta_list[idx-1]
+            theta[idx] = theta_list[idx-1] 
             
         # Propagate from body i-1 down to j
         for k in range(i-1, j-1, -1):

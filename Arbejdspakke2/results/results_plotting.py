@@ -262,7 +262,7 @@ def adams_comp(filename, adams_file_path, plot_diff=False, savefig=False):
     )
 
     if savefig == True:
-        plt.savefig("adams_comp.pdf")
+        plt.savefig("adams_comp.pdf", bbox_inches='tight')
         print("Figure saved as adams_comp.pdf in current directory.")
 
     plt.show()
@@ -392,7 +392,7 @@ def adams_comp_error_only(filename, adams_file_path, savefig=False):
     )
 
     if savefig == True:
-        plt.savefig("adams_comp_error_only.pdf")
+        plt.savefig("adams_comp_error_only.pdf", bbox_inches='tight')
         print("Figure saved as adams_comp_error_only.pdf in current directory.")
 
     plt.show()

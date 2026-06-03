@@ -305,7 +305,7 @@ def adams_delta_pend(filename, adams_file_path=None):
     plt.tight_layout()
     plt.show()
 
-def plot_constraint_violation(filenames, bg_params_list, title="Constraint Violation vs. Baumgarte Parameters"):
+def plot_constraint_violation(filenames, bg_params_list, title="Constraint Violation vs. Baumgarte Parameters",savefig=False):
     """
     Plots constraint violation from multiple CSV files on a single graph.
 
@@ -319,7 +319,7 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    plt.figure(figsize=(12, 7))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), layout="constrained")
 
     num_files = len(filenames)
     for i, (filename, bg_params) in enumerate(zip(filenames, bg_params_list)):
@@ -338,25 +338,36 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
             # Make the last line dotted for emphasis
             linestyle = '--' if i == num_files - 1 else '-'
             # Plot only from the start_index onwards
-            plt.plot(tspan[start_index:], violation[start_index:], label=fr'$A={alpha}, B={beta}$', linestyle=linestyle)
+            ax1.plot(tspan[start_index:], violation[start_index:], label=fr'$A={alpha}, B={beta}$', linestyle=linestyle)
+            ax2.plot(tspan[start_index:], violation[start_index:], label=fr'$A={alpha}, B={beta}$', linestyle=linestyle)
 
         except FileNotFoundError:
             print(f"Warning: File not found at {file_path}. Skipping.")
         except Exception as e:
             print(f"Warning: Could not process {filename}. Error: {e}")
 
-    plt.xlabel("Time [s]")
-    plt.ylabel("Constraint Error Norm ||Φ|| [m]")
-    plt.yscale('log')
-    plt.grid(True, which="both", ls="--")
-    # Formatting
-    plt.xlabel("Time [s]", fontsize=14)
-    plt.ylabel("Constraint Violation ||Φ|| [m]", fontsize=14)
-    plt.legend(loc='best', fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
-    plt.grid(True, alpha=0.5)
+    # Formatting Linear Plot
+    ax1.set_xlabel("Time [s]", fontsize=14)
+    ax1.set_ylabel("Constraint Violation ||Φ|| [m]", fontsize=14)
+    ax1.grid(True, which="both", ls="--", alpha=0.5)
+    ax1.tick_params(axis='both', which='major', labelsize=12)
 
-    plt.tick_params(axis='both', which='major', labelsize=12)
-    plt.tight_layout()
+    # Formatting Logarithmic Plot
+    ax2.set_xlabel("Time [s]", fontsize=14)
+    ax2.set_ylabel("Constraint Violation ||Φ|| [m]", fontsize=14)
+    ax2.set_yscale('log')
+    ax2.grid(True, which="both", ls="--", alpha=0.5)
+    ax2.tick_params(axis='both', which='major', labelsize=12)
+
+    # Shared Legend
+    handles, labels = ax1.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='outside lower center', ncol=num_files, fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
+
+    if savefig == True:
+        out_path = os.path.join(script_dir, "constraint_violation.pdf")
+        plt.savefig(out_path, bbox_inches='tight')
+        print(f"Figure saved as constraint_violation.pdf in {script_dir}")
+
     plt.show()
 
 
@@ -397,4 +408,6 @@ bg_sets = [
 ]
 
 # 3. Call the plotting function
-plot_TE_error("energy_free_hinge_open.csv")
+
+plot_constraint_violation(violation_files, bg_sets, savefig=True)
+#)

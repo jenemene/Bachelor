@@ -52,18 +52,18 @@ A_base = np.zeros(6)
 A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 
 
-robot.simulate(tspan,V_base,A_base,"closed",BG_params=[0.1,500])
+robot.simulate(tspan,V_base,A_base,"closed",BG_params=[50,500])
 
 robot.calc_TE_error()
 
-robot.plot_gen_velocities()
+#robot.plot_gen_velocities()
 
 path = "JensTestMappe/jens_arbejdspakke2/results"
-file_name = "energy_free_hinge"
-robot.CSV_creator(path, file_name, "tspan", "TE_error")
+file_name = "constraintviolation_BG=50_500"
+robot.CSV_creator(path, file_name, "tspan", "constraint_violation")
 
-plt.plot(tspan,robot.constraint_violation)
-plt.grid()
-plt.show()
+#plt.plot(tspan,robot.constraint_violation)
+#plt.grid()
+#plt.show()
 
-robot.animation(config="closed",step=5)
+#robot.animation(config="closed",step=5)

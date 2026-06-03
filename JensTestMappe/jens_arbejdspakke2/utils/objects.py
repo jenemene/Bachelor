@@ -786,6 +786,7 @@ class MultiBodySystem:
         Y[:, 0] = state0
         self.V = [None]*nt #to be able to save spatial velocities
         self.beta_dot = [None]*nt
+        self.constraint_violation = [] # Clear previous violations
         # Dynamically route the derivative calculation based on config
         def ODEfun(t, state, V_base, A_base):
             if config == "closed":
