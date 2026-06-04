@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.stats import linregress
 
 def statistical_plot(csv_filename):
     # 1. Load the benchmark data
@@ -103,8 +104,62 @@ def plot_TE_delta(csv_filename):
     plt.tight_layout()
     plt.show()
 
+def statistical_plot_with_lin_fit(csv_filename, savefig=False):
+    # 1. Load the benchmark data
+    df = pd.read_csv(csv_filename)
+
+    # 2. Group by the number of bodies and calculate statistical metrics
+    stats = df.groupby("Num_Bodies").agg({
+        "Solver_RK4_Time": ["mean", "std"],
+        "Solver_RK45_Time": ["mean", "std"]
+    }).reset_index()
+
+    stats.columns = [
+        "Num_Bodies", 
+        "RK4_mean", "RK4_std", 
+        "RK45_mean", "RK45_std"
+    ]
+
+    x = stats["Num_Bodies"].values
+
+    # 3. Perform Linear Regression
+    rk4_slope, rk4_intercept, rk4_r, _, _ = linregress(x, stats["RK4_mean"])
+    rk45_slope, rk45_intercept, rk45_r, _, _ = linregress(x, stats["RK45_mean"])
+
+    rk4_r2 = rk4_r**2
+    rk45_r2 = rk45_r**2
+
+    rk4_fit = rk4_slope * x + rk4_intercept
+    rk45_fit = rk45_slope * x + rk45_intercept
+
+    # 4. Create the plot
+    plt.figure(figsize=(10, 6))
+
+    # Plot RK4 points with error bars and its corresponding linear fit
+    plt.errorbar(x, stats["RK4_mean"], yerr=stats["RK4_std"], fmt="o", capsize=5, color="#1f77b4", alpha=0.6, label="Custom RK4 Data")
+    plt.plot(x, rk4_fit, "-", color="#1f77b4", linewidth=2, label=f"RK4 Linear Fit ($R^2 = {rk4_r2:.5f}$)")
+
+    # Plot RK45 points with error bars and its corresponding linear fit
+    plt.errorbar(x, stats["RK45_mean"], yerr=stats["RK45_std"], fmt="s", capsize=5, color="#ff7f0e", alpha=0.6, label="solve_ivp RK45 Data")
+    plt.plot(x, rk45_fit, "-", color="#ff7f0e", linewidth=2, label=f"RK45 Linear Fit ($R^2 = {rk45_r2:.5f}$)")
+
+    # 5. Styling and labels
+    plt.xlabel("Number of Bodies", fontsize=14)
+    plt.ylabel("Execution Time (s)", fontsize=14)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend(loc='best', fontsize=12, frameon=True, framealpha=0.9, labelspacing=1.2)
+    plt.tick_params(axis='both', which='major', labelsize=12)
+    plt.xticks(x)
+
+    plt.tight_layout()
+    
+    if savefig:
+        plt.savefig("computational_scaling_lin_fit.pdf")
+        print("Figure saved as computational_scaling_lin_fit.pdf in current directory.")
+        
+    plt.show()
+
 csv_filename = "Arbejdspakke2/order_n_val_results/solver_benchmark_results/1_to_20_interval_1.csv"
 
-statistical_plot(csv_filename)
-
+statistical_plot_with_lin_fit(csv_filename, savefig=True)
 plot_TE_delta(csv_filename)

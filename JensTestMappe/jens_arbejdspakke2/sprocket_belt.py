@@ -57,7 +57,7 @@ for i in range(N, 0, -1):
     robot.add_link(link)
 
 # --- 4. SIMULATION PARAMETERS ---
-tspan = np.arange(0, 15, 0.001)
+tspan = np.arange(0, 15.001, 0.001)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
