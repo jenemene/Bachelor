@@ -305,7 +305,7 @@ def adams_delta_pend(filename, adams_file_path=None):
     plt.tight_layout()
     plt.show()
 
-def plot_constraint_violation(filenames, bg_params_list, title="Constraint Violation vs. Baumgarte Parameters",savefig=False):
+def plot_constraint_violation(filenames, bg_params_list, title="Constraint Violation vs. Baumgarte Parameters",savefig=False, plot_log=True):
     """
     Plots constraint violation from multiple CSV files on a single graph.
 
@@ -313,13 +313,19 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
         filenames (list of str): List of CSV filenames.
         bg_params_list (list of list/tuple): List of [alpha, beta] pairs corresponding to each file.
         title (str): The title for the plot.
+        savefig (bool): Whether to save the figure to a PDF.
+        plot_log (bool): Whether to include a second subplot with a logarithmic y-axis.
     """
     if len(filenames) != len(bg_params_list):
         raise ValueError("The number of filenames must match the number of Baumgarte parameter sets.")
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), layout="constrained")
+    if plot_log:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), layout="constrained")
+    else:
+        fig, ax1 = plt.subplots(1, 1, figsize=(10, 6), layout="constrained")
+        ax2 = None
 
     num_files = len(filenames)
     for i, (filename, bg_params) in enumerate(zip(filenames, bg_params_list)):
@@ -339,7 +345,8 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
             linestyle = '--' if i == num_files - 1 else '-'
             # Plot only from the start_index onwards
             ax1.plot(tspan[start_index:], violation[start_index:], label=fr'$A={alpha}, B={beta}$', linestyle=linestyle)
-            ax2.plot(tspan[start_index:], violation[start_index:], label=fr'$A={alpha}, B={beta}$', linestyle=linestyle)
+            if ax2:
+                ax2.plot(tspan[start_index:], violation[start_index:], label=fr'$A={alpha}, B={beta}$', linestyle=linestyle)
 
         except FileNotFoundError:
             print(f"Warning: File not found at {file_path}. Skipping.")
@@ -351,13 +358,18 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
     ax1.set_ylabel("Constraint Violation ||Φ|| [m]", fontsize=14)
     ax1.grid(True, which="both", ls="--", alpha=0.5)
     ax1.tick_params(axis='both', which='major', labelsize=12)
+    
+    # Force scientific notation for the linear y-axis
+    ax1.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    ax1.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
 
     # Formatting Logarithmic Plot
-    ax2.set_xlabel("Time [s]", fontsize=14)
-    ax2.set_ylabel("Constraint Violation ||Φ|| [m]", fontsize=14)
-    ax2.set_yscale('log')
-    ax2.grid(True, which="both", ls="--", alpha=0.5)
-    ax2.tick_params(axis='both', which='major', labelsize=12)
+    if ax2:
+        ax2.set_xlabel("Time [s]", fontsize=14)
+        ax2.set_ylabel("Constraint Violation ||Φ|| [m]", fontsize=14)
+        ax2.set_yscale('log')
+        ax2.grid(True, which="both", ls="--", alpha=0.5)
+        ax2.tick_params(axis='both', which='major', labelsize=12)
 
     # Shared Legend
     handles, labels = ax1.get_legend_handles_labels()
@@ -399,15 +411,14 @@ def plot_TE_error(filename):
     plt.show()
 # 1. List the CSV files you want to compare
 violation_files = [
-    "constraintviolation_BG=10_50.csv","constraintviolation_BG=100_100.csv","constraintviolation_BG=0.1_500.csv","constraintviolation_BG=50_500.csv"
+    "constraint_violation_sprockets.csv"
     # Add more files here, e.g., "constraintviolation_BG_10_100.csv"
 ]
 # 2. List the corresponding Baumgarte parameters for each file
 bg_sets = [
-    [10,50],[100,100],[0.1,500],[50, 500]
+    [0.1,800]
 ]
 
 # 3. Call the plotting function
 
-plot_constraint_violation(violation_files, bg_sets, savefig=True)
-#)
+plot_constraint_violation(violation_files, bg_sets, savefig=True, plot_log=False)

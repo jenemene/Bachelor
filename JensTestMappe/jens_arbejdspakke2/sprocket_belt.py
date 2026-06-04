@@ -9,7 +9,7 @@ robot = ob.MultiBodySystem()
 N_s = 6  # Number of straight links per top/bottom edge
 N_c = 6  # Number of curved links per left/right edge
 N = 2 * N_s + 2 * N_c  # Total = 24 links
-L = 1.1  # Length of each link
+L = 0.2  # Length of each link
 
 # We need exactly 23 relative angles for the 23 spherical joints to close the loop:
 # To form a symmetric semi-circle with discrete links, the transitions from straight
@@ -28,9 +28,9 @@ rel_angles = (
 # Shift X left by half the straight section to center it at X=0
 start_x = - (N_s * L) / 2
 
-# Sprockets are at X= +/- 3.3, Z=0 with radius 2.125.
-# We spawn the top straight at Z = 2.175 to give it 5cm of clearance.
-start_z = 2.125
+# Sprockets are at X= +/- 0.6, Z=0 with radius 0.3864.
+# We spawn the top straight at Z = 0.3864 to give it exact clearance.
+start_z = 0.3864
 pos_base = np.array([start_x, 0.0, start_z])
 
 # Rotate the base 90 degrees around Y so it lays perfectly horizontal
@@ -50,14 +50,14 @@ for i in range(N, 0, -1):
         angle_idx = (N - 1) - i 
         joint.q_init = SOA.quatfromrev(rel_angles[angle_idx], "y")
         
-    # Create the link (Reduced mass to 2.0 so 24 links don't weigh ~500 kg)
-    link = ob.Link(mass=2.0, l_hinge=np.array([0, 0, L]), joint=joint)
+    # Create the link 
+    link = ob.Link(mass=20.0, l_hinge=np.array([0, 0, L]), joint=joint)
     
     # Add to system
     robot.add_link(link)
 
 # --- 4. SIMULATION PARAMETERS ---
-tspan = np.arange(0, 25, 0.001)
+tspan = np.arange(0, 15, 0.001)
 
 V_base = np.zeros(6)
 A_base = np.zeros(6)
@@ -75,9 +75,13 @@ robot.simulate(
     tspan, V_base, A_base, 
     config="sprockets", 
     BG_params=[0.1, 800], 
-    Penalty_params=[5e6, 4000]
+    Penalty_params=[5e7, 4000]
 )
 #old penalty Penalty_params=[1e7, 4000] but does not work for this large timestep
 robot.calc_and_plot_penetration()
+
+path = "JensTestMappe/jens_arbejdspakke2/results"
+file_name = "constraint_violation_sprockets"
+robot.CSV_creator(path, file_name, "tspan", "constraint_violation")
 
 robot.animation(config="closed", step=30)

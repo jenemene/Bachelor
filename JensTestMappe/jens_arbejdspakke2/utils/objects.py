@@ -302,7 +302,7 @@ class MultiBodySystem:
         n = len(self.links)
 
         #generalized forced are usedto simulate damping
-        damping = 0.5
+        damping = 0.0
         tau_list = [-damping * beta for beta in beta_list]
     
 
@@ -381,6 +381,10 @@ class MultiBodySystem:
         beta_dot_final_list = [b_f + b_delta for b_f, b_delta in zip(beta_dot_f_list, beta_dot_delta_list)]
 
         state_dot = np.concatenate(theta_dot_list + beta_dot_final_list)
+
+        if self._record_metrics == True:
+            self.constraint_violation.append(np.linalg.norm(Φ))
+            print(np.linalg.norm(Φ))
 
         return state_dot, V_f
 
@@ -667,7 +671,7 @@ class MultiBodySystem:
             delta_V_k = links[k].joint.H.T @ beta[k]
             V[k] = cRp @ RBT.T @ V[k+1] + delta_V_k
 
-            agothic[k] = SOA.spatialskewtilde(V[k]) @ delta_V_k - SOA.spatialskewbar(delta_V_k)@delta_V_k
+            agothic[k] = SOA.spatialskewtilde(V[k]) @ delta_V_k
             bgothic[k] = SOA.spatialskewbar(V[k]) @ links[k].M @ V[k]
         
         # --- PENALTY DETECTION --- #
@@ -681,8 +685,8 @@ class MultiBodySystem:
 
         # ---- 5. GEOMETRY ----
         sprockets = [
-             {'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]), 'radius': 2.12}, # Left Sprocket
-             {'center': np.array([ 3.3, 0.0, 0.0]), 'radius': 2.12}  # Right Sprocket
+             {'center': np.array([-0.6, 0.0, 0.0]), 'radius': 0.3864}, # Left Sprocket
+             {'center': np.array([0.6, 0.0, 0.0]), 'radius': 0.3864}  # Right Sprocket
          ]
         
         #gammelt center 'center': np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]),
@@ -713,8 +717,15 @@ class MultiBodySystem:
                     d_dot = np.dot(normal_vec, base_vel)
                     v_tangent = np.dot(tangent_vec,base_vel)
                     
-                    if t>15 and sprocket['center'][0]>0:
-                        F_drive_mag = 20.0
+                    if t>=5 and sprocket['center'][0]>0: #and statement is to ensure right sprocket is driving
+                        v_target = 2.0   # Target tangential velocity in m/s
+                        K_drive = 100.0  # Proportional gain (acts like the steepness of a motor's torque curve)
+                        
+                        F_drive_mag = K_drive * (v_target - v_tangent)
+                        
+                        # Prevent active braking if the chain is somehow pushed faster than target speed
+                        if F_drive_mag < 0.0:
+                            F_drive_mag = 0.0
                     else: 
                         F_drive_mag = 0.0
                     
@@ -1395,8 +1406,8 @@ class MultiBodySystem:
             positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
             
             sprockets = (
-                 (np.array([-1.0-(0.23*min(t,10)), 0.0, 0.0]) , 2.12), # Left Sprocket
-                 (np.array([ 3.3, 0.0, 0.0]), 2.12)                      # Right Sprocket
+                 (np.array([-0.6, 0.0, 0.0]) , 0.3864), # Left Sprocket
+                 (np.array([0.6, 0.0, 0.0]), 0.3864)                      # Right Sprocket
              )
             #gammelt center np.array([-1.0-(0.23*min(t, 10.0))
 
