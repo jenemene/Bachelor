@@ -283,8 +283,8 @@ class MultiBodySystem:
         theta_list, beta_list = self.unpack_state(state)
         n = len(self.links)
 
-        #generalized forced are usedto simulate damping
-        damping = 0.1
+        #generalized forced are used to simulate damping
+        damping = 0.0
         tau_list = [-damping * beta for beta in beta_list]
     
 
