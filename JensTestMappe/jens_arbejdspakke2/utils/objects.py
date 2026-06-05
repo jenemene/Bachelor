@@ -2,6 +2,7 @@ from matplotlib.animation import FuncAnimation
 import numpy as np
 from utils import soa as SOA
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 import time
 import csv
 from scipy.integrate import solve_ivp
@@ -1423,13 +1424,26 @@ class MultiBodySystem:
             
         self.penetration = max_penetrations
         
-        plt.figure(figsize=(10, 5))
-        plt.plot(self.tspan, max_penetrations * 1000, color='red', label='Max Penetration')
-        plt.xlabel('Time [s]')
-        plt.ylabel('Penetration Depth [mm]')
-        plt.title('Maximum Joint Penetration into Sprockets over Time')
-        plt.grid(True)
-        plt.legend()
+        fig, ax = plt.subplots(1, 1, figsize=(10, 6), layout="constrained")
+        
+        # Plotted in meters to match the constraint plot scale
+        ax.plot(self.tspan, max_penetrations, color='red', label='Max Penetration')
+        
+        ax.set_xlabel("Time [s]", fontsize=14)
+        ax.set_ylabel("Penetration Depth [m]", fontsize=14)
+        ax.grid(True, which="both", ls="--", alpha=0.5)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        
+        # Force scientific notation for the y-axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+        # Shared Legend style
+        handles, labels = ax.get_legend_handles_labels()
+        fig.legend(handles, labels, loc='outside lower center', ncol=1, fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
+        
+        # Save if requested (useful for your LaTeX report)
+        plt.savefig("penetration_depth.pdf")
         plt.show()
 
     def get_all_rotations_body_to_I(self, theta_list):

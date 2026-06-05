@@ -377,7 +377,7 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
 
     if savefig == True:
         out_path = os.path.join(script_dir, "constraint_violation.pdf")
-        plt.savefig(out_path, bbox_inches='tight')
+        plt.savefig(out_path)
         print(f"Figure saved as constraint_violation.pdf in {script_dir}")
 
     plt.show()
