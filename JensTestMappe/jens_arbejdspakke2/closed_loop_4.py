@@ -23,11 +23,10 @@ joint3.q_init = SOA.quatfromrev(-np.pi/2, "y")
 joint2.q_init = SOA.quatfromrev(-np.pi/2, "y")
 joint1.q_init = SOA.quatfromrev(-np.pi/2, "y")
 
-joint4.w_init = np.array([0,1,0])
-joint2.w_init = np.array([0,1,0])
+
 
 #defining link
-mass = 2
+mass = 20
 link4 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint4)
 link3 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
 link2 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint2)
@@ -42,7 +41,7 @@ robot.add_link(link1)
 
 #parameters for simulation
 dt = 0.005
-end_time = 25
+end_time = 5
 tspan = np.arange(0, end_time + dt/2, dt) # dt/2 to include end_time
 
 V_base = np.zeros(6)
@@ -50,11 +49,8 @@ A_base = np.zeros(6)
 A_base[-1] = 0*9.81 #simulating gravity in z
 
 robot.plot_initial_state("closed")
+
 robot.simulate(tspan,V_base,A_base,"closed",BG_params=[10,40])
-
-# robot.calc_TE_delta()
-
-
 
 plt.plot(tspan,robot.constraint_violation)
 plt.grid()
