@@ -9,15 +9,13 @@ def statistical_plot(csv_filename):
     # 2. Group by the number of bodies and calculate statistical metrics
     # This computes the mean (the point) and standard deviation (the error bar length)
     stats = df.groupby("Num_Bodies").agg({
-        "Solver_RK4_Time": ["mean", "std"],
-        "Solver_RK45_Time": ["mean", "std"]
+        "Solver_RK4_Time": ["mean", "std"]
     }).reset_index()
 
     # Flatten the multi-level column names for easier access
     stats.columns = [
         "Num_Bodies", 
-        "RK4_mean", "RK4_std", 
-        "RK45_mean", "RK45_std"
+        "RK4_mean", "RK4_std"
     ]
 
     # 3. Create the plot
@@ -32,18 +30,6 @@ def statistical_plot(csv_filename):
         capsize=5,         # Width of the error bar caps
         label="Custom RK4 (Fixed dt)",
         color="#1f77b4",   # Clean blue
-        alpha=0.8
-    )
-
-    # Plot RK45 with error bars
-    plt.errorbar(
-        stats["Num_Bodies"], 
-        stats["RK45_mean"], 
-        yerr=stats["RK45_std"], 
-        fmt="s-",          # 's' for square markers, '-' for connecting line
-        capsize=5,         
-        label="solve_ivp RK45 (Adaptive)",
-        color="#ff7f0e",   # Clean orange
         alpha=0.8
     )
 
@@ -110,27 +96,22 @@ def statistical_plot_with_lin_fit(csv_filename, savefig=False):
 
     # 2. Group by the number of bodies and calculate statistical metrics
     stats = df.groupby("Num_Bodies").agg({
-        "Solver_RK4_Time": ["mean", "std"],
-        "Solver_RK45_Time": ["mean", "std"]
+        "Solver_RK4_Time": ["mean", "std"]
     }).reset_index()
 
     stats.columns = [
         "Num_Bodies", 
-        "RK4_mean", "RK4_std", 
-        "RK45_mean", "RK45_std"
+        "RK4_mean", "RK4_std"
     ]
 
     x = stats["Num_Bodies"].values
 
     # 3. Perform Linear Regression
     rk4_slope, rk4_intercept, rk4_r, _, _ = linregress(x, stats["RK4_mean"])
-    rk45_slope, rk45_intercept, rk45_r, _, _ = linregress(x, stats["RK45_mean"])
 
     rk4_r2 = rk4_r**2
-    rk45_r2 = rk45_r**2
 
     rk4_fit = rk4_slope * x + rk4_intercept
-    rk45_fit = rk45_slope * x + rk45_intercept
 
     # 4. Create the plot
     plt.figure(figsize=(10, 6))
@@ -138,10 +119,6 @@ def statistical_plot_with_lin_fit(csv_filename, savefig=False):
     # Plot RK4 points with error bars and its corresponding linear fit
     plt.errorbar(x, stats["RK4_mean"], yerr=stats["RK4_std"], fmt="o", capsize=5, color="#1f77b4", alpha=0.6, label="Custom RK4 Data")
     plt.plot(x, rk4_fit, "-", color="#1f77b4", linewidth=2, label=f"RK4 Linear Fit ($R^2 = {rk4_r2:.5f}$)")
-
-    # Plot RK45 points with error bars and its corresponding linear fit
-    plt.errorbar(x, stats["RK45_mean"], yerr=stats["RK45_std"], fmt="s", capsize=5, color="#ff7f0e", alpha=0.6, label="solve_ivp RK45 Data")
-    plt.plot(x, rk45_fit, "-", color="#ff7f0e", linewidth=2, label=f"RK45 Linear Fit ($R^2 = {rk45_r2:.5f}$)")
 
     # 5. Styling and labels
     plt.xlabel("Number of Bodies", fontsize=14)

@@ -259,7 +259,7 @@ class MultiBodySystem:
         
         λ = -np.linalg.solve((Q @ Λ_block @ Q.T), f)
         
-        print(f"t={t:.2f}   |Φ|={np.linalg.norm(Φ):.2e}")
+        #print(f"t={t:.2f}   |Φ|={np.linalg.norm(Φ):.2e}")
 
         #calculating f_c
         f_c_closed_loop_const = -Q.T@λ

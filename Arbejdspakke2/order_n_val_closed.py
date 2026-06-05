@@ -15,7 +15,7 @@ A_base[-1] = 0.0  # No gravity
 
 # Setup for validation
 n_start = 3
-n_end = 10
+n_end = 20
 step_length = 1
 repeats = 3
 
@@ -46,7 +46,7 @@ with open(csv_filename, mode='w', newline='') as file:
         for r in range(repeats):
             # Benchmark custom RK4 solver
             start_rk4 = time.perf_counter()
-            pend.simulate_own_RK4(tspan, V_base, A_base, "closed", BG_params=[10, 40])
+            pend.simulate_own_RK4(tspan, V_base, A_base, "closed", BG_params=[0.1, 500])
             end_rk4 = time.perf_counter()
             t_rk4 = end_rk4 - start_rk4
             pend.calc_TE_error()
