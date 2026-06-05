@@ -17,7 +17,7 @@ A_base[-1] = 0.0  # No gravity
 n_start = 3
 n_end = 20
 step_length = 1
-repeats = 3
+repeats = 10
 
 n_bodies_list = list(range(n_start, n_end+1, step_length))
 
