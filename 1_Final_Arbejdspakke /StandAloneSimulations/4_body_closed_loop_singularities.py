@@ -1,4 +1,8 @@
 #imports
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import numpy as np
 from utils import objects as ob
 from utils import soa as SOA
@@ -27,7 +31,7 @@ joint1.q_init = SOA.quatfromrev(-np.pi/2, "y")
 joint4.w_init = np.array([0,1,0])
 
 #defining link
-mass = 2
+mass = 20
 link4 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint4)
 link3 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint3)
 link2 = ob.Link(mass=mass, l_hinge=np.array([0, 0, 0.2]), joint=joint2)

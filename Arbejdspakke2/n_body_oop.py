@@ -42,7 +42,7 @@ V_base = np.zeros(6)
 A_base = np.zeros(6)
 A_base[-1] = 9.81 #simulating gravitcompute_pos_iny in z
 
-#robot.plot_initial_state("open")
+robot.plot_initial_state("open")
 
 robot.simulate(tspan,V_base,A_base,"open")
 

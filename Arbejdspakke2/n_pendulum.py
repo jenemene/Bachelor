@@ -23,7 +23,7 @@ link2 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint2)
 link1 = ob.Link(mass=20.0, l_hinge=np.array([0, 0, 0.2]), joint=joint1)
 
 #adding link (first link is added to the base, second link is added to the first link and so on)
-dp.add_link(linkFree)
+dp.add_link(link2)
 dp.add_link(link1)
 dp.add_link(link1)
 dp.add_link(link1)
