@@ -1398,36 +1398,39 @@ class MultiBodySystem:
             
         n = len(self.links)
         nt = len(self.tspan)
-        max_penetrations = np.zeros(nt)
         
-        for i in range(nt):
-            t = self.tspan[i]
-            state = self.result[:, i]
-            theta_list, _ = self.unpack_state(state)
-            positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+        # Only calculate if it has not been computed yet to avoid redundant loops
+        if not hasattr(self, 'max_penetration') or len(self.max_penetration) != nt:
+            max_penetrations = np.zeros(nt)
             
-            sprockets = (
-                 (np.array([-0.6, 0.0, 0.0]) , 0.3864), # Left Sprocket
-                 (np.array([0.6, 0.0, 0.0]), 0.3864)                      # Right Sprocket
-             )
-            #gammelt center np.array([-1.0-(0.23*min(t, 10.0))
-
-            max_pen = 0.0
-            for k in range(1, n+1):
-                pos = positions[k]
-                for center, radius in sprockets:
-                    dist = np.linalg.norm(pos - center)
-                    pen = radius - dist
-                    if pen > max_pen:
-                        max_pen = pen
-            max_penetrations[i] = max_pen
-            
-        self.penetration = max_penetrations
+            for i in range(nt):
+                t = self.tspan[i]
+                state = self.result[:, i]
+                theta_list, _ = self.unpack_state(state)
+                positions = SOA.compute_pos_in_inertial_frame(theta_list, self.links, n)
+                
+                sprockets = (
+                     (np.array([-0.6, 0.0, 0.0]) , 0.3864), # Left Sprocket
+                     (np.array([0.6, 0.0, 0.0]), 0.3864)                      # Right Sprocket
+                 )
+                #gammelt center np.array([-1.0-(0.23*min(t, 10.0))
+    
+                max_pen = 0.0
+                for k in range(1, n+1):
+                    pos = positions[k]
+                    for center, radius in sprockets:
+                        dist = np.linalg.norm(pos - center)
+                        pen = radius - dist
+                        if pen > max_pen:
+                            max_pen = pen
+                max_penetrations[i] = max_pen
+                
+            self.max_penetration = max_penetrations
         
         fig, ax = plt.subplots(1, 1, figsize=(10, 6), layout="constrained")
         
         # Plotted in meters to match the constraint plot scale
-        ax.plot(self.tspan, max_penetrations, color='red', label='Max Penetration')
+        ax.plot(self.tspan, self.max_penetration, color='red', label='Max Penetration')
         
         ax.set_xlabel("Time [s]", fontsize=14)
         ax.set_ylabel("Penetration Depth [m]", fontsize=14)

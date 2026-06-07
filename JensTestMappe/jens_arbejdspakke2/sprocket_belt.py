@@ -83,5 +83,6 @@ robot.calc_and_plot_penetration()
 path = "JensTestMappe/jens_arbejdspakke2/results"
 file_name = "constraint_violation_sprockets"
 robot.CSV_creator(path, file_name, "tspan", "constraint_violation")
+robot.CSV_creator(path, "penetration_sprockets", "tspan", "max_penetration")
 
 robot.animation(config="closed", step=30)

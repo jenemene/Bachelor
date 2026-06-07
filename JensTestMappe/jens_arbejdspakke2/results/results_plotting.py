@@ -409,7 +409,43 @@ def plot_TE_error(filename):
     ax.tick_params(axis='both', which='major', labelsize=12)
 
     plt.show()
-# 1. List the CSV files you want to compare
+
+
+def plot_max_penetration(filename, penalty_params, savefig=False):
+    # Resolve the absolute path relative to this script's location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, filename)
+
+    # Load the CSV data
+    data = np.loadtxt(file_path, delimiter=',')
+    tspan, max_pen = data[:, 0], data[:, 1]
+
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6), layout="constrained")
+
+    k, c = penalty_params
+    ax.plot(tspan, max_pen, color='red', label=fr'Max Penetration ($k={k:.1e}, c={c}$)')
+
+    # Formatting
+    ax.set_xlabel("Time [s]", fontsize=14)
+    ax.set_ylabel("Penetration Depth [m]", fontsize=14)
+    ax.grid(True, which="both", ls="--", alpha=0.5)
+    ax.tick_params(axis='both', which='major', labelsize=12)
+
+    # Force scientific notation for the y-axis
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+    
+    # Shared Legend style similar to constraint plot
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='outside lower center', ncol=1, fontsize=14, frameon=True, framealpha=0.9, labelspacing=1.2)
+
+    if savefig:
+        out_path = os.path.join(script_dir, "penetration_plot.pdf")
+        plt.savefig(out_path)
+        print(f"Figure saved as penetration_plot.pdf in {script_dir}")
+
+    plt.show()
+
 violation_files = [
     "constraint_violation_sprockets.csv"
     # Add more files here, e.g., "constraintviolation_BG_10_100.csv"
@@ -422,3 +458,4 @@ bg_sets = [
 # 3. Call the plotting function
 
 plot_constraint_violation(violation_files, bg_sets, savefig=True, plot_log=False)
+plot_max_penetration("penetration_sprockets.csv", penalty_params=[5e7, 4000], savefig=True)
