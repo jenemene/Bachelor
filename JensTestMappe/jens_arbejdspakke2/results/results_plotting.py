@@ -355,7 +355,7 @@ def plot_constraint_violation(filenames, bg_params_list, title="Constraint Viola
 
     # Formatting Linear Plot
     ax1.set_xlabel("Time [s]", fontsize=14)
-    ax1.set_ylabel("Constraint Violation ||Φ|| [m]", fontsize=14)
+    ax1.set_ylabel("Constraint Violation [m]", fontsize=14)
     ax1.grid(True, which="both", ls="--", alpha=0.5)
     ax1.tick_params(axis='both', which='major', labelsize=12)
     
